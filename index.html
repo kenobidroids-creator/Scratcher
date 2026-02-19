@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; touch-action: none; }
+        .scratch-container {
+            position: relative;
+            width: 300px;
+            height: 150px;
+            margin-top: 50px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .prize-layer {
+            position: absolute;
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            background: #fff; font-size: 2.5rem;
+        }
+        canvas { position: absolute; top: 0; left: 0; cursor: crosshair; touch-action: none; }
+        button { margin-top: 20px; padding: 10px 20px; font-size: 1rem; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="scratch-container">
+    <div id="prize" class="prize-layer">❓</div>
+    <canvas id="scratch-canvas" width="300" height="150"></canvas>
+</div>
+
+<button onclick="location.reload()">New Card</button>
+
+<script>
+    const canvas = document.getElementById('scratch-canvas');
+    const ctx = canvas.getContext('2d');
+    const prizeDiv = document.getElementById('prize');
+    let isDrawing = false;
+
+    // 1. Randomize the Prize
+    const symbols = ['💰', '🍒', '💎', '🍀', '⭐', '🍎'];
+    prizeDiv.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+
+    // 2. Draw the Scratch Layer
+    ctx.fillStyle = '#C0C0C0';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add "Scratchy" texture
+    ctx.fillStyle = '#999';
+    for(let i=0; i<400; i++) ctx.fillRect(Math.random()*300, Math.random()*150, 1, 1);
+
+    // 3. Unified Scratch Logic
+    function getPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        // Handle both Touch and Mouse coordinates
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    function scratch(e) {
+        if (!isDrawing) return;
+        e.preventDefault(); // Prevents scrolling while scratching on mobile
+        const pos = getPos(e);
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 20, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Event Listeners for Mouse
+    canvas.addEventListener('mousedown', () => isDrawing = true);
+    window.addEventListener('mouseup', () => isDrawing = false);
+    canvas.addEventListener('mousemove', scratch);
+
+    // Event Listeners for Mobile Touch
+    canvas.addEventListener('touchstart', (e) => { isDrawing = true; scratch(e); });
+    canvas.addEventListener('touchend', () => isDrawing = false);
+    canvas.addEventListener('touchmove', scratch);
+</script>
+
+</body>
+</html>
