@@ -3,82 +3,154 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; touch-action: none; }
-        .scratch-container {
-            position: relative;
-            width: 300px;
-            height: 150px;
-            margin-top: 50px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            border-radius: 10px;
-            overflow: hidden;
+        body { font-family: 'Arial', sans-serif; text-align: center; background: #2c3e50; color: white; touch-action: none; margin: 0; padding: 20px; }
+        .stats { font-size: 1.5rem; margin-bottom: 10px; color: #f1c40f; }
+        
+        .card-container {
+            position: relative; width: 300px; height: 300px; margin: 0 auto;
+            background: #ecf0f1; border-radius: 15px; overflow: hidden; border: 4px solid #f1c40f;
         }
-        .prize-layer {
-            position: absolute;
-            width: 100%; height: 100%;
+
+        /* 2x2 Grid for the prizes */
+        .prize-grid {
+            display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+            width: 100%; height: 100%; position: absolute;
+        }
+        .prize-cell {
             display: flex; align-items: center; justify-content: center;
-            background: #fff; font-size: 2.5rem;
+            font-size: 3rem; border: 1px dashed #bdc3c7; background: white; color: black;
         }
-        canvas { position: absolute; top: 0; left: 0; cursor: crosshair; touch-action: none; }
-        button { margin-top: 20px; padding: 10px 20px; font-size: 1rem; cursor: pointer; }
+
+        canvas { position: absolute; top: 0; left: 0; cursor: pointer; touch-action: none; }
+
+        .modal {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; color: #333; padding: 30px; border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 100; width: 80%; max-width: 300px;
+        }
+        button { background: #27ae60; color: white; border: none; padding: 15px 30px; font-size: 1.2rem; border-radius: 10px; cursor: pointer; margin-top: 15px; }
+        button:disabled { background: #7f8c8d; }
     </style>
 </head>
 <body>
 
-<div class="scratch-container">
-    <div id="prize" class="prize-layer">❓</div>
-    <canvas id="scratch-canvas" width="300" height="150"></canvas>
-</div>
+    <div class="stats">💰 Coins: <span id="coin-count">10</span></div>
+    
+    <div class="card-container">
+        <div class="prize-grid" id="grid">
+            <div class="prize-cell">?</div><div class="prize-cell">?</div>
+            <div class="prize-cell">?</div><div class="prize-cell">?</div>
+        </div>
+        <canvas id="scratch-canvas" width="300" height="300"></canvas>
+    </div>
 
-<button onclick="location.reload()">New Card</button>
+    <button id="buy-btn" onclick="buyCard()">Buy Card (2 Coins)</button>
+
+    <div id="result-modal" class="modal">
+        <h2 id="modal-title">You Won!</h2>
+        <p id="modal-msg">You matched 3 symbols!</p>
+        <button onclick="closeModal()">Play Again</button>
+    </div>
 
 <script>
+    let coins = 10;
+    const symbols = ['🍒', '💎', '🍋', '⭐', '🔔'];
     const canvas = document.getElementById('scratch-canvas');
     const ctx = canvas.getContext('2d');
-    const prizeDiv = document.getElementById('prize');
     let isDrawing = false;
+    let cardActive = false;
 
-    // 1. Randomize the Prize
-    const symbols = ['💰', '🍒', '💎', '🍀', '⭐', '🍎'];
-    prizeDiv.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+    // 1. Initialize Canvas (Blank/Clear state)
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 2. Draw the Scratch Layer
-    ctx.fillStyle = '#C0C0C0';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Add "Scratchy" texture
-    ctx.fillStyle = '#999';
-    for(let i=0; i<400; i++) ctx.fillRect(Math.random()*300, Math.random()*150, 1, 1);
+    function buyCard() {
+        if (coins < 2) return alert("Not enough coins!");
+        
+        coins -= 2;
+        updateUI();
+        cardActive = true;
+        document.getElementById('buy-btn').disabled = true;
 
-    // 3. Unified Scratch Logic
-    function getPos(e) {
-        const rect = canvas.getBoundingClientRect();
-        // Handle both Touch and Mouse coordinates
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return { x: clientX - rect.left, y: clientY - rect.top };
+        // Generate Prizes
+        const results = [];
+        const cells = document.querySelectorAll('.prize-cell');
+        cells.forEach(cell => {
+            const sym = symbols[Math.floor(Math.random() * symbols.length)];
+            cell.innerText = sym;
+            results.push(sym);
+        });
+
+        // Determine Win logic
+        const counts = {};
+        results.forEach(s => counts[s] = (counts[s] || 0) + 1);
+        const maxMatch = Math.max(...Object.values(counts));
+
+        // Paint the scratch layer
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#95a5a6';
+        ctx.fillRect(0, 0, 300, 300);
+        ctx.fillStyle = '#7f8c8d';
+        for(let i=0; i<800; i++) ctx.fillRect(Math.random()*300, Math.random()*300, 2, 2);
+
+        // Prepare Win Message (shown later)
+        if (maxMatch >= 3) {
+            setupModal("JACKPOT!", "3 Matches! You won 20 Coins!", 20);
+        } else if (maxMatch === 2) {
+            setupModal("Nice!", "2 Matches! You won 5 Coins!", 5);
+        } else {
+            setupModal("Better luck next time!", "No matches.", 0);
+        }
+    }
+
+    function setupModal(title, msg, winAmount) {
+        document.getElementById('modal-title').innerText = title;
+        document.getElementById('modal-msg').innerText = msg;
+        canvas.winData = winAmount;
     }
 
     function scratch(e) {
-        if (!isDrawing) return;
-        e.preventDefault(); // Prevents scrolling while scratching on mobile
-        const pos = getPos(e);
+        if (!isDrawing || !cardActive) return;
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
         ctx.globalCompositeOperation = 'destination-out';
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 20, 0, Math.PI * 2);
+        ctx.arc(clientX - rect.left, clientY - rect.top, 25, 0, Math.PI * 2);
         ctx.fill();
+
+        // Check if scratched enough (roughly)
+        checkCompletion();
     }
 
-    // Event Listeners for Mouse
+    function checkCompletion() {
+        // We trigger the modal after a short delay once they start scratching
+        // In a real game, you'd calculate pixel transparency here
+        if (!canvas.timer) {
+            canvas.timer = setTimeout(() => {
+                document.getElementById('result-modal').style.display = 'block';
+                coins += canvas.winData;
+                updateUI();
+                cardActive = false;
+            }, 3000); // Reveal after 3 seconds of scratching
+        }
+    }
+
+    function closeModal() {
+        document.getElementById('result-modal').style.display = 'none';
+        document.getElementById('buy-btn').disabled = false;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.timer = null;
+    }
+
+    function updateUI() { document.getElementById('coin-count').innerText = coins; }
+
     canvas.addEventListener('mousedown', () => isDrawing = true);
     window.addEventListener('mouseup', () => isDrawing = false);
     canvas.addEventListener('mousemove', scratch);
-
-    // Event Listeners for Mobile Touch
     canvas.addEventListener('touchstart', (e) => { isDrawing = true; scratch(e); });
     canvas.addEventListener('touchend', () => isDrawing = false);
     canvas.addEventListener('touchmove', scratch);
 </script>
-
 </body>
 </html>
