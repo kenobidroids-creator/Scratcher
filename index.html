@@ -1,40 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Super Scratcher</title>
     <style>
-        body { font-family: 'Arial', sans-serif; text-align: center; background: #2c3e50; color: white; touch-action: none; margin: 0; padding: 20px; }
-        .stats { font-size: 1.5rem; margin-bottom: 10px; color: #f1c40f; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            background: #2c3e50; 
+            color: white; 
+            margin: 0; 
+            padding: 20px;
+            touch-action: none; 
+        }
+        .stats { font-size: 1.8rem; margin-bottom: 20px; color: #f1c40f; font-weight: bold; }
         
         .card-container {
-            position: relative; width: 300px; height: 300px; margin: 0 auto;
-            background: #ecf0f1; border-radius: 15px; overflow: hidden; border: 4px solid #f1c40f;
+            position: relative; 
+            width: 300px; 
+            height: 300px; 
+            margin: 0 auto;
+            background: #ecf0f1; 
+            border-radius: 15px; 
+            overflow: hidden; 
+            border: 5px solid #f39c12;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
         }
 
-        /* 2x2 Grid for the prizes */
         .prize-grid {
-            display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
-            width: 100%; height: 100%; position: absolute;
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            grid-template-rows: 1fr 1fr;
+            width: 100%; height: 100%; 
+            position: absolute;
+            background: #fff;
         }
         .prize-cell {
-            display: flex; align-items: center; justify-content: center;
-            font-size: 3rem; border: 1px dashed #bdc3c7; background: white; color: black;
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            font-size: 3.5rem; 
+            border: 1px solid #eee;
+            color: #333;
         }
 
-        canvas { position: absolute; top: 0; left: 0; cursor: pointer; touch-action: none; }
+        canvas { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            cursor: crosshair; 
+            touch-action: none;
+            z-index: 10;
+        }
 
         .modal {
-            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: white; color: #333; padding: 30px; border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 100; width: 80%; max-width: 300px;
+            display: none; 
+            position: fixed; 
+            top: 50%; left: 50%; 
+            transform: translate(-50%, -50%);
+            background: white; 
+            color: #333; 
+            padding: 30px; 
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8); 
+            z-index: 100; 
+            width: 250px;
         }
-        button { background: #27ae60; color: white; border: none; padding: 15px 30px; font-size: 1.2rem; border-radius: 10px; cursor: pointer; margin-top: 15px; }
-        button:disabled { background: #7f8c8d; }
+        button { 
+            background: #27ae60; 
+            color: white; 
+            border: none; 
+            padding: 15px 30px; 
+            font-size: 1.2rem; 
+            border-radius: 50px; 
+            cursor: pointer; 
+            margin-top: 20px;
+            font-weight: bold;
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+        button:disabled { background: #7f8c8d; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
-    <div class="stats">💰 Coins: <span id="coin-count">10</span></div>
+    <div class="stats">💰 Coins: <span id="coin-count">--</span></div>
     
     <div class="card-container">
         <div class="prize-grid" id="grid">
@@ -47,159 +98,159 @@
     <button id="buy-btn" onclick="buyCard()">Buy Card (2 Coins)</button>
 
     <div id="result-modal" class="modal">
-        <h2 id="modal-title">You Won!</h2>
-        <p id="modal-msg">You matched 3 symbols!</p>
-        <button onclick="closeModal()">Play Again</button>
+        <h2 id="modal-title">Result</h2>
+        <p id="modal-msg">-</p>
+        <button onclick="closeModal()">Collect & Close</button>
     </div>
 
 <script>
-// --- 1. State & Persistence ---
-let coins = parseInt(localStorage.getItem('scratcher_coins')) || 10;
-// If it's a new player, set the timer to now.
-if (!localStorage.getItem('last_login_time')) {
-    localStorage.setItem('last_login_time', Date.now().toString());
-}
+    // --- Config & State ---
+    let coins = parseInt(localStorage.getItem('scratcher_coins')) || 10;
+    const symbols = ['🍒', '💎', '🍋', '⭐', '🔔'];
+    const canvas = document.getElementById('scratch-canvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+    let cardActive = false;
+    let pendingWin = 0;
 
-const symbols = ['🍒', '💎', '🍋', '⭐', '🔔'];
-const canvas = document.getElementById('scratch-canvas');
-const ctx = canvas.getContext('2d');
-let isDrawing = false;
-let cardActive = false;
-let pendingWin = 0;
-
-// Initialize
-handleRecharge();
-updateUI();
-
-// --- 2. The 4-Hour Recharge (4 coins every 4hrs, max 12hrs) ---
-function handleRecharge() {
-    const now = Date.now();
-    const lastLogin = parseInt(localStorage.getItem('last_login_time'));
-    const msElapsed = now - lastLogin;
-    const hoursElapsed = msElapsed / (1000 * 60 * 60);
-    
-    // Math: How many full 4-hour blocks passed?
-    let blocks = Math.floor(hoursElapsed / 4);
-    
-    if (blocks > 0) {
-        // Cap blocks at 3 (3 blocks * 4 hours = 12 hours max reward)
-        if (blocks > 3) blocks = 3;
-        
-        const bonus = blocks * 4;
-        coins += bonus;
-        
-        alert(`Time reward! You've claimed ${bonus} bonus coins.`);
-        
-        // Reset timer to "now" but preserve minutes toward the NEXT block
-        const consumedMs = blocks * 4 * 60 * 60 * 1000;
-        localStorage.setItem('last_login_time', (lastLogin + consumedMs).toString());
-        updateUI();
-    }
-}
-
-// --- 3. UI & Save ---
-function updateUI() {
-    document.getElementById('coin-count').innerText = coins;
-    localStorage.setItem('scratcher_coins', coins.toString());
-}
-
-// --- 4. Game Loop ---
-function buyCard() {
-    if (coins < 2) return alert("Out of coins! Wait for your 4-hour recharge.");
-    
-    // 1. Deduct Coins
-    coins -= 2;
+    // --- Init ---
+    handleRecharge();
     updateUI();
-    
-    // 2. IMMEDIATELY Paint the Foil (before changing symbols)
-    // We disable transitions temporarily to make the foil pop in instantly
-    canvas.style.transition = "none";
-    canvas.style.opacity = "1";
-    
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#C0C0C0';
-    ctx.fillRect(0, 0, 300, 300);
-    
-    // Add texture
-    ctx.fillStyle = '#A9A9A9';
-    for(let i=0; i<400; i++) ctx.fillRect(Math.random()*300, Math.random()*300, 2, 2);
-
-    // 3. Now that the "curtain" is closed, change the symbols
-    const results = [];
-    document.querySelectorAll('.prize-cell').forEach(cell => {
-        const sym = symbols[Math.floor(Math.random() * symbols.length)];
-        cell.innerText = sym;
-        results.push(sym);
-    });
-
-    // 4. Set Win Data
-    const counts = {};
-    results.forEach(s => counts[s] = (counts[s] || 0) + 1);
-    const maxMatch = Math.max(...Object.values(counts));
-
-    if (maxMatch >= 3) {
-        setWin("JACKPOT!", "3 Matches! You won 20 Coins!", 20);
-    } else if (maxMatch === 2) {
-        setWin("Nice!", "2 Matches! You won 5 Coins!", 5);
-    } else {
-        setWin("No Luck", "Try again in the next one!", 0);
-    }
-
-    // 5. Re-enable scratching
-    cardActive = true;
-    document.getElementById('buy-btn').disabled = true;
-}
-
-
-// --- 5. Scratch Logic & Reveal ---
-function scratch(e) {
-    if (!isDrawing || !cardActive) return;
-    e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-    const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.beginPath();
-    ctx.arc(x, y, 30, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Debounce the percentage check for performance
-    if (Math.random() > 0.9) checkReveal();
-}
-
-function checkReveal() {
-    const data = ctx.getImageData(0,0,300,300).data;
-    let transparent = 0;
-    for (let i = 3; i < data.length; i += 4) if (data[i] === 0) transparent++;
-
-    if (transparent / (300 * 300) > 0.5) {
-        cardActive = false;
-        canvas.style.transition = "opacity 1s";
-        canvas.style.opacity = "0";
-
-        // The "Anticipation Delay"
-        setTimeout(() => {
-            coins += pendingWin;
-            updateUI();
-            document.getElementById('result-modal').style.display = 'block';
-        }, 1500); 
-    }
-}
-
-function closeModal() {
-    document.getElementById('result-modal').style.display = 'none';
-    document.getElementById('buy-btn').disabled = false;
+    // Pre-clear canvas so it doesn't block the grid initially
     ctx.clearRect(0,0,300,300);
-}
 
-// Events
-canvas.addEventListener('mousedown', () => isDrawing = true);
-window.addEventListener('mouseup', () => isDrawing = false);
-canvas.addEventListener('mousemove', scratch);
-canvas.addEventListener('touchstart', (e) => { isDrawing = true; scratch(e); });
-canvas.addEventListener('touchend', () => isDrawing = false);
-canvas.addEventListener('touchmove', scratch);
+    function updateUI() {
+        document.getElementById('coin-count').innerText = coins;
+        localStorage.setItem('scratcher_coins', coins);
+    }
+
+    // --- Time Rewards ---
+    function handleRecharge() {
+        const now = Date.now();
+        const lastLogin = parseInt(localStorage.getItem('last_login_time')) || now;
+        const msElapsed = now - lastLogin;
+        const hoursElapsed = msElapsed / (1000 * 60 * 60);
+        
+        let blocks = Math.floor(hoursElapsed / 4);
+        if (blocks > 0) {
+            if (blocks > 3) blocks = 3; // Max 12 hours (3 blocks)
+            const bonus = blocks * 4;
+            coins += bonus;
+            alert(`Welcome back! You earned ${bonus} bonus coins from your time away.`);
+            localStorage.setItem('last_login_time', now.toString());
+            updateUI();
+        } else if (!localStorage.getItem('last_login_time')) {
+            localStorage.setItem('last_login_time', now.toString());
+        }
+    }
+
+    // --- Game Logic ---
+    function buyCard() {
+        if (coins < 2) return alert("Not enough coins! Wait for your 4-hour recharge.");
+        
+        // 1. Setup Foil IMMEDIATELY
+        canvas.style.transition = "none"; 
+        canvas.style.opacity = "1";
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#C0C0C0';
+        ctx.fillRect(0, 0, 300, 300);
+        
+        // Grain texture
+        ctx.fillStyle = '#A9A9A9';
+        for(let i=0; i<500; i++) ctx.fillRect(Math.random()*300, Math.random()*300, 2, 2);
+
+        // 2. Delay symbol change by 50ms so the foil has time to paint (Prevents flickering)
+        setTimeout(() => {
+            const results = [];
+            document.querySelectorAll('.prize-cell').forEach(cell => {
+                const sym = symbols[Math.floor(Math.random() * symbols.length)];
+                cell.innerText = sym;
+                results.push(sym);
+            });
+
+            const counts = {};
+            results.forEach(s => counts[s] = (counts[s] || 0) + 1);
+            const maxMatch = Math.max(...Object.values(counts));
+
+            if (maxMatch >= 3) {
+                setWinData("JACKPOT!", "3 Matches! You won 20 Coins!", 20);
+            } else if (maxMatch === 2) {
+                setWinData("Nice!", "2 Matches! You won 5 Coins!", 5);
+            } else {
+                setWinData("No Luck", "Try another card!", 0);
+            }
+
+            coins -= 2;
+            updateUI();
+            cardActive = true;
+            document.getElementById('buy-btn').disabled = true;
+        }, 50);
+    }
+
+    function setWinData(title, msg, amount) {
+        document.getElementById('modal-title').innerText = title;
+        document.getElementById('modal-msg').innerText = msg;
+        pendingWin = amount;
+    }
+
+    // --- Scratch Interaction ---
+    function scratch(e) {
+        if (!isDrawing || !cardActive) return;
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(x, y, 30, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Check completion every few strokes
+        if (Math.random() > 0.9) checkReveal();
+    }
+
+    function checkReveal() {
+        const pixels = ctx.getImageData(0,0,300,300).data;
+        let transparent = 0;
+        for (let i = 3; i < pixels.length; i += 4) {
+            if (pixels[i] === 0) transparent++;
+        }
+
+        if (transparent / (300*300) > 0.45) {
+            cardActive = false;
+            canvas.style.transition = "opacity 1s ease";
+            canvas.style.opacity = "0";
+
+            // Wait for fade + anticipation
+            setTimeout(() => {
+                coins += pendingWin;
+                updateUI();
+                document.getElementById('result-modal').style.display = 'block';
+            }, 1200);
+        }
+    }
+
+    function closeModal() {
+        document.getElementById('result-modal').style.display = 'none';
+        document.getElementById('buy-btn').disabled = false;
+        ctx.clearRect(0,0,300,300);
+        // Save login time on every complete game to keep clock accurate
+        localStorage.setItem('last_login_time', Date.now().toString());
+    }
+
+    // --- Listeners ---
+    canvas.addEventListener('mousedown', () => isDrawing = true);
+    window.addEventListener('mouseup', () => isDrawing = false);
+    canvas.addEventListener('mousemove', scratch);
+    
+    canvas.addEventListener('touchstart', (e) => { 
+        isDrawing = true; 
+        scratch(e); 
+    }, {passive: false});
+    canvas.addEventListener('touchend', () => isDrawing = false);
+    canvas.addEventListener('touchmove', scratch, {passive: false});
+
 </script>
 </body>
 </html>
