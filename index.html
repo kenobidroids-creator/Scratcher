@@ -53,24 +53,59 @@
     </div>
 
 <script>
-    // --- 1. Load Saved Data ---
+// --- 1. State & Persistence ---
 let coins = parseInt(localStorage.getItem('scratcher_coins')) || 10;
+// If it's a new player, set the timer to now.
+if (!localStorage.getItem('last_login_time')) {
+    localStorage.setItem('last_login_time', Date.now().toString());
+}
+
 const symbols = ['🍒', '💎', '🍋', '⭐', '🔔'];
 const canvas = document.getElementById('scratch-canvas');
 const ctx = canvas.getContext('2d');
 let isDrawing = false;
 let cardActive = false;
-let pendingWin = 0; // Stores the win amount until the modal pops
+let pendingWin = 0;
 
+// Initialize
+handleRecharge();
 updateUI();
 
-function updateUI() {
-    document.getElementById('coin-count').innerText = coins;
-    localStorage.setItem('scratcher_coins', coins); // Save every time UI updates
+// --- 2. The 4-Hour Recharge (4 coins every 4hrs, max 12hrs) ---
+function handleRecharge() {
+    const now = Date.now();
+    const lastLogin = parseInt(localStorage.getItem('last_login_time'));
+    const msElapsed = now - lastLogin;
+    const hoursElapsed = msElapsed / (1000 * 60 * 60);
+    
+    // Math: How many full 4-hour blocks passed?
+    let blocks = Math.floor(hoursElapsed / 4);
+    
+    if (blocks > 0) {
+        // Cap blocks at 3 (3 blocks * 4 hours = 12 hours max reward)
+        if (blocks > 3) blocks = 3;
+        
+        const bonus = blocks * 4;
+        coins += bonus;
+        
+        alert(`Time reward! You've claimed ${bonus} bonus coins.`);
+        
+        // Reset timer to "now" but preserve minutes toward the NEXT block
+        const consumedMs = blocks * 4 * 60 * 60 * 1000;
+        localStorage.setItem('last_login_time', (lastLogin + consumedMs).toString());
+        updateUI();
+    }
 }
 
+// --- 3. UI & Save ---
+function updateUI() {
+    document.getElementById('coin-count').innerText = coins;
+    localStorage.setItem('scratcher_coins', coins.toString());
+}
+
+// --- 4. Game Loop ---
 function buyCard() {
-    if (coins < 2) return alert("Not enough coins! Come back later.");
+    if (coins < 2) return alert("Out of coins! Wait for your 4-hour recharge.");
     
     coins -= 2;
     updateUI();
@@ -78,73 +113,69 @@ function buyCard() {
     document.getElementById('buy-btn').disabled = true;
     canvas.style.opacity = "1";
 
-    // Generate Prizes & Logic
+    // Randomize 2x2 Grid
     const results = [];
-    const cells = document.querySelectorAll('.prize-cell');
-    cells.forEach(cell => {
+    document.querySelectorAll('.prize-cell').forEach(cell => {
         const sym = symbols[Math.floor(Math.random() * symbols.length)];
         cell.innerText = sym;
         results.push(sym);
     });
 
+    // Calculate Win (3 matches = 20, 2 matches = 5)
     const counts = {};
     results.forEach(s => counts[s] = (counts[s] || 0) + 1);
     const maxMatch = Math.max(...Object.values(counts));
 
-    // Prepare the Canvas
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#95a5a6';
-    ctx.fillRect(0, 0, 300, 300);
-    // Add grit/texture
-    ctx.fillStyle = '#7f8c8d';
-    for(let i=0; i<600; i++) ctx.fillRect(Math.random()*300, Math.random()*300, 2, 2);
-
-    // Set Win Data
     if (maxMatch >= 3) {
-        setupModalData("JACKPOT!", "3 Matches! You won 20 Coins!", 20);
+        setWin("JACKPOT!", "3 Matches! You won 20 Coins!", 20);
     } else if (maxMatch === 2) {
-        setupModalData("Nice!", "2 Matches! You won 5 Coins!", 5);
+        setWin("Nice!", "2 Matches! You won 5 Coins!", 5);
     } else {
-        setupModalData("Bummer!", "No matches this time.", 0);
+        setWin("No Luck", "Try again in the next one!", 0);
     }
+
+    // Paint Foil
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#C0C0C0';
+    ctx.fillRect(0, 0, 300, 300);
+    ctx.fillStyle = '#A9A9A9';
+    for(let i=0; i<400; i++) ctx.fillRect(Math.random()*300, Math.random()*300, 2, 2);
 }
 
-function setupModalData(title, msg, winAmount) {
+function setWin(title, msg, amount) {
     document.getElementById('modal-title').innerText = title;
     document.getElementById('modal-msg').innerText = msg;
-    pendingWin = winAmount;
+    pendingWin = amount;
 }
 
+// --- 5. Scratch Logic & Reveal ---
 function scratch(e) {
     if (!isDrawing || !cardActive) return;
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
-    ctx.arc(clientX - rect.left, clientY - rect.top, 30, 0, Math.PI * 2);
+    ctx.arc(x, y, 30, 0, Math.PI * 2);
     ctx.fill();
 
-    checkCompletion();
+    // Debounce the percentage check for performance
+    if (Math.random() > 0.9) checkReveal();
 }
 
-function checkCompletion() {
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+function checkReveal() {
+    const data = ctx.getImageData(0,0,300,300).data;
     let transparent = 0;
-    for (let i = 3; i < pixels.length; i += 4) {
-        if (pixels[i] === 0) transparent++;
-    }
+    for (let i = 3; i < data.length; i += 4) if (data[i] === 0) transparent++;
 
-    if ((transparent / (canvas.width * canvas.height)) > 0.5) {
-        cardActive = false; // Stop scratching logic
-        
-        // 1. Fade the remaining foil out
-        canvas.style.transition = "opacity 0.8s ease";
+    if (transparent / (300 * 300) > 0.5) {
+        cardActive = false;
+        canvas.style.transition = "opacity 1s";
         canvas.style.opacity = "0";
 
-        // 2. DELAY before showing the result modal (1.5 seconds)
+        // The "Anticipation Delay"
         setTimeout(() => {
             coins += pendingWin;
             updateUI();
@@ -156,10 +187,10 @@ function checkCompletion() {
 function closeModal() {
     document.getElementById('result-modal').style.display = 'none';
     document.getElementById('buy-btn').disabled = false;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0,0,300,300);
 }
 
-// Listeners (Same as your GitHub version)
+// Events
 canvas.addEventListener('mousedown', () => isDrawing = true);
 window.addEventListener('mouseup', () => isDrawing = false);
 canvas.addEventListener('mousemove', scratch);
