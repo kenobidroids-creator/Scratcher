@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Scratcher - Smooth Edition</title>
+    <title>Scratch Inc.</title>
     <style>
         :root {
             --bg-deep: #0f172a;
@@ -102,12 +102,12 @@
 <body>
 
     <div class="header">
-        <div style="font-weight: bold; font-size: 1.4rem;">Web Scratcher</div>
+        <div style="font-weight: bold; font-size: 1.4rem;">Scratch Inc.</div>
         <div class="stats-badge">💰 <span id="coin-count">--</span></div>
     </div>
 
     <div class="card-container">
-        <div class="prize-grid">
+        <div class="prize-grid" id="prize-grid">
             <div class="prize-cell">?</div><div class="prize-cell">?</div>
             <div class="prize-cell">?</div><div class="prize-cell">?</div>
         </div>
@@ -136,6 +136,7 @@
     </div>
 
 <script>
+    // --- State & Variables ---
     let coins = parseInt(localStorage.getItem('scratcher_coins')) || 10;
     let sizeLvl = parseInt(localStorage.getItem('size_lvl')) || 1;
     let strLvl = parseInt(localStorage.getItem('str_lvl')) || 1;
@@ -147,12 +148,12 @@
     const pCtx = pCanvas.getContext('2d');
     
     let isDrawing = false;
-    let lastX = 0; // Track previous X
-    let lastY = 0; // Track previous Y
+    let lastX = 0, lastY = 0;
     let cardActive = false;
     let pendingWin = 0;
     let particles = [];
 
+    // --- Setup ---
     updateUI();
     handleRecharge();
     animateParticles();
@@ -161,12 +162,14 @@
         document.getElementById('coin-count').innerText = coins;
         document.getElementById('size-lvl').innerText = sizeLvl;
         document.getElementById('str-lvl').innerText = strLvl;
+        
         const sizeCost = sizeLvl * 50;
         const strCost = strLvl * 75;
         document.getElementById('up-size').innerText = `${sizeCost} 💰`;
         document.getElementById('up-str').innerText = `${strCost} 💰`;
         document.getElementById('up-size').disabled = coins < sizeCost;
         document.getElementById('up-str').disabled = coins < strCost;
+
         localStorage.setItem('scratcher_coins', coins);
         localStorage.setItem('size_lvl', sizeLvl);
         localStorage.setItem('str_lvl', strLvl);
@@ -196,6 +199,7 @@
         }
     }
 
+    // --- Particle FX ---
     function createParticles(x, y) {
         for(let i=0; i < (2 * strLvl); i++) {
             particles.push({
@@ -217,12 +221,16 @@
         requestAnimationFrame(animateParticles);
     }
 
+    // --- Scratch Logic ---
     function buyCard() {
         if (coins < 2) return alert("Not enough coins!");
         coins -= 2;
         updateUI();
+        
         canvas.style.transition = "none";
         canvas.style.opacity = "1";
+        
+        // Foil Texture
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = '#cbd5e1'; 
         ctx.fillRect(0, 0, 320, 320);
@@ -230,17 +238,18 @@
         for(let i=0; i<800; i++) {
             ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
         }
+
         const res = [];
         document.querySelectorAll('.prize-cell').forEach(c => {
             const s = symbols[Math.floor(Math.random() * symbols.length)];
             c.innerText = s; res.push(s);
         });
+
         const counts = {};
         res.forEach(s => counts[s] = (counts[s] || 0) + 1);
         const maxMatch = Math.max(...Object.values(counts));
         pendingWin = maxMatch >= 3 ? 20 : (maxMatch === 2 ? 5 : 0);
         
-        // Modal update logic fixed
         if (pendingWin > 0) {
             document.getElementById('modal-title').innerText = "WINNER!";
             document.getElementById('modal-msg').innerHTML = `Found ${maxMatch} matches!<br><span class="win-amount">+${pendingWin} 💰</span>`;
@@ -260,31 +269,23 @@
         const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
 
         ctx.globalCompositeOperation = 'destination-out';
-        
-        // Bristle Brush Variables
         const baseRadius = 10 + (sizeLvl * 2);
         const bristles = 5 + strLvl;
 
-        // SMOOTHING LOGIC: Line-based interpolation
+        // Smooth Interpolation
         ctx.lineWidth = baseRadius;
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
+        ctx.lineJoin = "round"; ctx.lineCap = "round";
 
-        // Draw multiple jittered lines to maintain bristle effect while smoothing gaps
         for(let i=0; i < bristles; i++) {
             const offsetX = (Math.random() - 0.5) * baseRadius;
             const offsetY = (Math.random() - 0.5) * baseRadius;
-            
             ctx.beginPath();
             ctx.moveTo(lastX + offsetX, lastY + offsetY);
             ctx.lineTo(x + offsetX, y + offsetY);
             ctx.stroke();
         }
 
-        // Update previous coordinates
-        lastX = x;
-        lastY = y;
-
+        lastX = x; lastY = y;
         createParticles(x, y);
         if (Math.random() > 0.98) checkReveal();
     }
@@ -293,6 +294,7 @@
         const data = ctx.getImageData(0,0,320,320).data;
         let trans = 0;
         for(let i=3; i<data.length; i+=4) if(data[i] === 0) trans++;
+        
         const threshold = 0.60 - (strLvl * 0.01); 
         if ((trans / (320*320)) > threshold) {
             cardActive = false;
@@ -309,6 +311,10 @@
     function closeModal() {
         document.getElementById('result-modal').style.display = 'none';
         document.getElementById('buy-btn').disabled = false;
+        
+        // Reset symbols to ? between rounds
+        document.querySelectorAll('.prize-cell').forEach(c => c.innerText = "?");
+        
         ctx.clearRect(0,0,320,320);
         localStorage.setItem('last_login_time', Date.now().toString());
     }
