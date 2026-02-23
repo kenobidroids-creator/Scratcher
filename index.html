@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scratch Upgrader</title>
+    <title>Scratch Upgrader - Bristle Edition</title>
     <style>
         body { 
             font-family: 'Courier New', Courier, monospace; 
@@ -11,14 +11,13 @@
             touch-action: none;
         }
         .game-layout { display: flex; gap: 20px; padding: 20px; flex-wrap: wrap; justify-content: center; }
-        
-        /* Stats & Card */
         .main-area { display: flex; flex-direction: column; align-items: center; }
         .stats { font-size: 2rem; color: #f1c40f; margin-bottom: 10px; text-shadow: 2px 2px #000; }
         
         .card-container {
             position: relative; width: 300px; height: 300px;
             background: #fff; border-radius: 10px; overflow: hidden; border: 4px solid #444;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         .prize-grid {
             display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
@@ -30,7 +29,6 @@
         }
         canvas { position: absolute; top: 0; left: 0; cursor: crosshair; z-index: 10; }
 
-        /* Shop Sidebar */
         .shop {
             background: #333; padding: 20px; border-radius: 10px; width: 200px;
             border: 2px solid #555;
@@ -39,33 +37,30 @@
         .upgrade-item { margin-bottom: 15px; }
         .upgrade-item p { margin: 5px 0; font-size: 0.9rem; }
         
-        /* Buttons */
         button { 
             background: #27ae60; color: white; border: none; padding: 10px; 
             width: 100%; border-radius: 5px; cursor: pointer; font-weight: bold;
         }
-        button:disabled { background: #555; cursor: not-allowed; }
-        button:active { transform: scale(0.98); }
-        #buy-btn { font-size: 1.2rem; padding: 15px; margin-top: 10px; width: 300px; }
+        button:disabled { background: #555; cursor: not-allowed; opacity: 0.5; }
+        #buy-btn { font-size: 1.2rem; padding: 15px; margin-top: 15px; width: 300px; border: 3px solid #27ae60; }
 
-        /* Particle layer */
         #particle-canvas { pointer-events: none; position: absolute; z-index: 20; }
 
         .modal {
             display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: #fff; color: #333; padding: 20px; border-radius: 10px; z-index: 100;
-            text-align: center; border: 5px solid #f1c40f;
+            text-align: center; border: 5px solid #f1c40f; width: 220px;
         }
     </style>
 </head>
 <body>
 
-    <div class="stats">💰 <span id="coin-count">10</span></div>
+    <div class="stats">💰 <span id="coin-count">--</span></div>
 
     <div class="game-layout">
         <div class="main-area">
             <div class="card-container">
-                <div class="prize-grid">
+                <div class="prize-grid" id="prize-container">
                     <div class="prize-cell">?</div><div class="prize-cell">?</div>
                     <div class="prize-cell">?</div><div class="prize-cell">?</div>
                 </div>
@@ -78,11 +73,11 @@
         <div class="shop">
             <h3>UPGRADES</h3>
             <div class="upgrade-item">
-                <p>Size: <span id="size-lvl">1</span></p>
+                <p>Coin Size: <span id="size-lvl">1</span></p>
                 <button id="up-size" onclick="upgrade('size')">Widen (50 💰)</button>
             </div>
             <div class="upgrade-item">
-                <p>Strength: <span id="str-lvl">1</span></p>
+                <p>Scratch Strength: <span id="str-lvl">1</span></p>
                 <button id="up-str" onclick="upgrade('strength')">Power (75 💰)</button>
             </div>
         </div>
@@ -95,7 +90,6 @@
     </div>
 
 <script>
-    // --- State ---
     let coins = parseInt(localStorage.getItem('scratcher_coins')) || 10;
     let sizeLvl = parseInt(localStorage.getItem('size_lvl')) || 1;
     let strLvl = parseInt(localStorage.getItem('str_lvl')) || 1;
@@ -111,7 +105,6 @@
     let pendingWin = 0;
     let particles = [];
 
-    // --- Init ---
     updateUI();
     handleRecharge();
     animateParticles();
@@ -121,8 +114,8 @@
         document.getElementById('size-lvl').innerText = sizeLvl;
         document.getElementById('str-lvl').innerText = strLvl;
         
-        document.getElementById('up-size').innerText = `Widen (${sizeLvl * 50} 💰)`;
-        document.getElementById('up-str').innerText = `Power (${strLvl * 75} 💰)`;
+        document.getElementById('up-size').innerText = `Widen (${sizeLvl * 50})`;
+        document.getElementById('up-str').innerText = `Power (${strLvl * 75})`;
         
         document.getElementById('up-size').disabled = coins < (sizeLvl * 50);
         document.getElementById('up-str').disabled = coins < (strLvl * 75);
@@ -132,7 +125,6 @@
         localStorage.setItem('str_lvl', strLvl);
     }
 
-    // --- Upgrades ---
     function upgrade(type) {
         if (type === 'size') {
             const cost = sizeLvl * 50;
@@ -144,7 +136,6 @@
         updateUI();
     }
 
-    // --- Time Rewards (4 every 4hrs) ---
     function handleRecharge() {
         const now = Date.now();
         const last = parseInt(localStorage.getItem('last_login_time')) || now;
@@ -153,21 +144,22 @@
         if (blocks > 0) {
             const bonus = Math.min(blocks * 4, 12);
             coins += bonus;
-            alert(`Earned ${bonus} coins while away!`);
+            alert(`Claimed ${bonus} coins while you were gone!`);
             localStorage.setItem('last_login_time', now.toString());
             updateUI();
         }
     }
 
-    // --- Particle System ---
     function createParticles(x, y) {
-        for(let i=0; i<3 * strLvl; i++) {
+        // Reduced particle count slightly for "heavier" feel
+        for(let i=0; i < (2 * strLvl); i++) {
             particles.push({
-                x: x, y: y,
-                vx: (Math.random() - 0.5) * 4,
-                vy: (Math.random() - 0.5) * 4,
-                life: 20 + Math.random() * 20,
-                size: 2 + Math.random() * 3
+                x: x + (Math.random()-0.5)*10,
+                y: y + (Math.random()-0.5)*10,
+                vx: (Math.random() - 0.5) * 2,
+                vy: Math.random() * 3, // Particles fall down
+                life: 30,
+                size: 1 + Math.random() * 2
             });
         }
     }
@@ -176,14 +168,13 @@
         pCtx.clearRect(0, 0, 300, 300);
         particles.forEach((p, i) => {
             p.x += p.vx; p.y += p.vy; p.life--;
-            pCtx.fillStyle = `rgba(150, 150, 150, ${p.life/40})`;
+            pCtx.fillStyle = `rgba(140, 140, 140, ${p.life/30})`;
             pCtx.fillRect(p.x, p.y, p.size, p.size);
             if(p.life <= 0) particles.splice(i, 1);
         });
         requestAnimationFrame(animateParticles);
     }
 
-    // --- Game Logic ---
     function buyCard() {
         if (coins < 2) return alert("Not enough coins!");
         coins -= 2;
@@ -191,11 +182,17 @@
         
         canvas.style.transition = "none";
         canvas.style.opacity = "1";
+        
+        // --- Restore Gritty Texture ---
         ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = '#C0C0C0';
+        ctx.fillStyle = '#C0C0C0'; // Silver base
         ctx.fillRect(0, 0, 300, 300);
         
-        // Symbols
+        ctx.fillStyle = '#999'; // Gritty darker spots
+        for(let i=0; i<800; i++) {
+            ctx.fillRect(Math.random()*300, Math.random()*300, 1.5, 1.5);
+        }
+
         const res = [];
         document.querySelectorAll('.prize-cell').forEach(c => {
             const s = symbols[Math.floor(Math.random() * symbols.length)];
@@ -207,8 +204,8 @@
         const maxMatch = Math.max(...Object.values(counts));
         pendingWin = maxMatch >= 3 ? 20 : (maxMatch === 2 ? 5 : 0);
         
-        document.getElementById('modal-title').innerText = pendingWin > 0 ? "Winner!" : "No Luck";
-        document.getElementById('modal-msg').innerText = `Found ${maxMatch} matches.`;
+        document.getElementById('modal-title').innerText = pendingWin > 0 ? "WINNER!" : "TRY AGAIN";
+        document.getElementById('modal-msg').innerText = `Matches: ${maxMatch}`;
         
         cardActive = true;
         document.getElementById('buy-btn').disabled = true;
@@ -222,16 +219,21 @@
 
         ctx.globalCompositeOperation = 'destination-out';
         
-        // The "Scratch" brush influenced by upgrades
-        const radius = 15 + (sizeLvl * 5);
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.fill();
+        // --- Bristle Brush Logic ---
+        // Instead of one circle, we draw multiple tiny ones for a rough edge
+        const baseRadius = 10 + (sizeLvl * 2);
+        const bristles = 5 + strLvl;
+        
+        for(let i=0; i < bristles; i++) {
+            const offsetX = (Math.random() - 0.5) * (baseRadius);
+            const offsetY = (Math.random() - 0.5) * (baseRadius);
+            ctx.beginPath();
+            ctx.arc(x + offsetX, y + offsetY, baseRadius/2, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
         createParticles(x, y);
-
-        // Strength makes completion happen with less effort
-        if (Math.random() > 0.9) checkReveal();
+        if (Math.random() > 0.98) checkReveal(); // Lowered frequency to make them work for it
     }
 
     function checkReveal() {
@@ -239,17 +241,17 @@
         let trans = 0;
         for(let i=3; i<data.length; i+=4) if(data[i] === 0) trans++;
         
-        // Higher strength = card finishes earlier (Threshold drops)
-        const threshold = 0.5 - (strLvl * 0.02); 
-        if ((trans / (300*300)) > Math.max(threshold, 0.2)) {
+        // Requirement is now higher (60% must be clear)
+        const threshold = 0.60 - (strLvl * 0.01); 
+        if ((trans / (300*300)) > threshold) {
             cardActive = false;
-            canvas.style.transition = "opacity 1s";
+            canvas.style.transition = "opacity 1.2s";
             canvas.style.opacity = "0";
             setTimeout(() => {
                 coins += pendingWin;
                 updateUI();
                 document.getElementById('result-modal').style.display = 'block';
-            }, 1000);
+            }, 1500);
         }
     }
 
