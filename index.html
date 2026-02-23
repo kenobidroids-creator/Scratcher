@@ -53,104 +53,119 @@
     </div>
 
 <script>
-    let coins = 10;
-    const symbols = ['🍒', '💎', '🍋', '⭐', '🔔'];
-    const canvas = document.getElementById('scratch-canvas');
-    const ctx = canvas.getContext('2d');
-    let isDrawing = false;
-    let cardActive = false;
+    // --- 1. Load Saved Data ---
+let coins = parseInt(localStorage.getItem('scratcher_coins')) || 10;
+const symbols = ['🍒', '💎', '🍋', '⭐', '🔔'];
+const canvas = document.getElementById('scratch-canvas');
+const ctx = canvas.getContext('2d');
+let isDrawing = false;
+let cardActive = false;
+let pendingWin = 0; // Stores the win amount until the modal pops
 
-    // 1. Initialize Canvas (Blank/Clear state)
+updateUI();
+
+function updateUI() {
+    document.getElementById('coin-count').innerText = coins;
+    localStorage.setItem('scratcher_coins', coins); // Save every time UI updates
+}
+
+function buyCard() {
+    if (coins < 2) return alert("Not enough coins! Come back later.");
+    
+    coins -= 2;
+    updateUI();
+    cardActive = true;
+    document.getElementById('buy-btn').disabled = true;
+    canvas.style.opacity = "1";
+
+    // Generate Prizes & Logic
+    const results = [];
+    const cells = document.querySelectorAll('.prize-cell');
+    cells.forEach(cell => {
+        const sym = symbols[Math.floor(Math.random() * symbols.length)];
+        cell.innerText = sym;
+        results.push(sym);
+    });
+
+    const counts = {};
+    results.forEach(s => counts[s] = (counts[s] || 0) + 1);
+    const maxMatch = Math.max(...Object.values(counts));
+
+    // Prepare the Canvas
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#95a5a6';
+    ctx.fillRect(0, 0, 300, 300);
+    // Add grit/texture
+    ctx.fillStyle = '#7f8c8d';
+    for(let i=0; i<600; i++) ctx.fillRect(Math.random()*300, Math.random()*300, 2, 2);
+
+    // Set Win Data
+    if (maxMatch >= 3) {
+        setupModalData("JACKPOT!", "3 Matches! You won 20 Coins!", 20);
+    } else if (maxMatch === 2) {
+        setupModalData("Nice!", "2 Matches! You won 5 Coins!", 5);
+    } else {
+        setupModalData("Bummer!", "No matches this time.", 0);
+    }
+}
+
+function setupModalData(title, msg, winAmount) {
+    document.getElementById('modal-title').innerText = title;
+    document.getElementById('modal-msg').innerText = msg;
+    pendingWin = winAmount;
+}
+
+function scratch(e) {
+    if (!isDrawing || !cardActive) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(clientX - rect.left, clientY - rect.top, 30, 0, Math.PI * 2);
+    ctx.fill();
+
+    checkCompletion();
+}
+
+function checkCompletion() {
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let transparent = 0;
+    for (let i = 3; i < pixels.length; i += 4) {
+        if (pixels[i] === 0) transparent++;
+    }
+
+    if ((transparent / (canvas.width * canvas.height)) > 0.5) {
+        cardActive = false; // Stop scratching logic
+        
+        // 1. Fade the remaining foil out
+        canvas.style.transition = "opacity 0.8s ease";
+        canvas.style.opacity = "0";
+
+        // 2. DELAY before showing the result modal (1.5 seconds)
+        setTimeout(() => {
+            coins += pendingWin;
+            updateUI();
+            document.getElementById('result-modal').style.display = 'block';
+        }, 1500); 
+    }
+}
+
+function closeModal() {
+    document.getElementById('result-modal').style.display = 'none';
+    document.getElementById('buy-btn').disabled = false;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
 
-    function buyCard() {
-        if (coins < 2) return alert("Not enough coins!");
-        
-        coins -= 2;
-        updateUI();
-        cardActive = true;
-        document.getElementById('buy-btn').disabled = true;
-
-        // Generate Prizes
-        const results = [];
-        const cells = document.querySelectorAll('.prize-cell');
-        cells.forEach(cell => {
-            const sym = symbols[Math.floor(Math.random() * symbols.length)];
-            cell.innerText = sym;
-            results.push(sym);
-        });
-
-        // Determine Win logic
-        const counts = {};
-        results.forEach(s => counts[s] = (counts[s] || 0) + 1);
-        const maxMatch = Math.max(...Object.values(counts));
-
-        // Paint the scratch layer
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = '#95a5a6';
-        ctx.fillRect(0, 0, 300, 300);
-        ctx.fillStyle = '#7f8c8d';
-        for(let i=0; i<800; i++) ctx.fillRect(Math.random()*300, Math.random()*300, 2, 2);
-
-        // Prepare Win Message (shown later)
-        if (maxMatch >= 3) {
-            setupModal("JACKPOT!", "3 Matches! You won 20 Coins!", 20);
-        } else if (maxMatch === 2) {
-            setupModal("Nice!", "2 Matches! You won 5 Coins!", 5);
-        } else {
-            setupModal("Better luck next time!", "No matches.", 0);
-        }
-    }
-
-    function setupModal(title, msg, winAmount) {
-        document.getElementById('modal-title').innerText = title;
-        document.getElementById('modal-msg').innerText = msg;
-        canvas.winData = winAmount;
-    }
-
-    function scratch(e) {
-        if (!isDrawing || !cardActive) return;
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.beginPath();
-        ctx.arc(clientX - rect.left, clientY - rect.top, 25, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Check if scratched enough (roughly)
-        checkCompletion();
-    }
-
-    function checkCompletion() {
-        // We trigger the modal after a short delay once they start scratching
-        // In a real game, you'd calculate pixel transparency here
-        if (!canvas.timer) {
-            canvas.timer = setTimeout(() => {
-                document.getElementById('result-modal').style.display = 'block';
-                coins += canvas.winData;
-                updateUI();
-                cardActive = false;
-            }, 3000); // Reveal after 3 seconds of scratching
-        }
-    }
-
-    function closeModal() {
-        document.getElementById('result-modal').style.display = 'none';
-        document.getElementById('buy-btn').disabled = false;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        canvas.timer = null;
-    }
-
-    function updateUI() { document.getElementById('coin-count').innerText = coins; }
-
-    canvas.addEventListener('mousedown', () => isDrawing = true);
-    window.addEventListener('mouseup', () => isDrawing = false);
-    canvas.addEventListener('mousemove', scratch);
-    canvas.addEventListener('touchstart', (e) => { isDrawing = true; scratch(e); });
-    canvas.addEventListener('touchend', () => isDrawing = false);
-    canvas.addEventListener('touchmove', scratch);
+// Listeners (Same as your GitHub version)
+canvas.addEventListener('mousedown', () => isDrawing = true);
+window.addEventListener('mouseup', () => isDrawing = false);
+canvas.addEventListener('mousemove', scratch);
+canvas.addEventListener('touchstart', (e) => { isDrawing = true; scratch(e); });
+canvas.addEventListener('touchend', () => isDrawing = false);
+canvas.addEventListener('touchmove', scratch);
 </script>
 </body>
 </html>
