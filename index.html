@@ -107,13 +107,24 @@ function updateUI() {
 function buyCard() {
     if (coins < 2) return alert("Out of coins! Wait for your 4-hour recharge.");
     
+    // 1. Deduct Coins
     coins -= 2;
     updateUI();
-    cardActive = true;
-    document.getElementById('buy-btn').disabled = true;
+    
+    // 2. IMMEDIATELY Paint the Foil (before changing symbols)
+    // We disable transitions temporarily to make the foil pop in instantly
+    canvas.style.transition = "none";
     canvas.style.opacity = "1";
+    
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#C0C0C0';
+    ctx.fillRect(0, 0, 300, 300);
+    
+    // Add texture
+    ctx.fillStyle = '#A9A9A9';
+    for(let i=0; i<400; i++) ctx.fillRect(Math.random()*300, Math.random()*300, 2, 2);
 
-    // Randomize 2x2 Grid
+    // 3. Now that the "curtain" is closed, change the symbols
     const results = [];
     document.querySelectorAll('.prize-cell').forEach(cell => {
         const sym = symbols[Math.floor(Math.random() * symbols.length)];
@@ -121,7 +132,7 @@ function buyCard() {
         results.push(sym);
     });
 
-    // Calculate Win (3 matches = 20, 2 matches = 5)
+    // 4. Set Win Data
     const counts = {};
     results.forEach(s => counts[s] = (counts[s] || 0) + 1);
     const maxMatch = Math.max(...Object.values(counts));
@@ -134,19 +145,11 @@ function buyCard() {
         setWin("No Luck", "Try again in the next one!", 0);
     }
 
-    // Paint Foil
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#C0C0C0';
-    ctx.fillRect(0, 0, 300, 300);
-    ctx.fillStyle = '#A9A9A9';
-    for(let i=0; i<400; i++) ctx.fillRect(Math.random()*300, Math.random()*300, 2, 2);
+    // 5. Re-enable scratching
+    cardActive = true;
+    document.getElementById('buy-btn').disabled = true;
 }
 
-function setWin(title, msg, amount) {
-    document.getElementById('modal-title').innerText = title;
-    document.getElementById('modal-msg').innerText = msg;
-    pendingWin = amount;
-}
 
 // --- 5. Scratch Logic & Reveal ---
 function scratch(e) {
