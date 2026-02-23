@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Scratcher - Deep Blue</title>
+    <title>Web Scratcher - Smooth Edition</title>
     <style>
         :root {
             --bg-deep: #0f172a;
@@ -147,6 +147,8 @@
     const pCtx = pCanvas.getContext('2d');
     
     let isDrawing = false;
+    let lastX = 0; // Track previous X
+    let lastY = 0; // Track previous Y
     let cardActive = false;
     let pendingWin = 0;
     let particles = [];
@@ -159,14 +161,12 @@
         document.getElementById('coin-count').innerText = coins;
         document.getElementById('size-lvl').innerText = sizeLvl;
         document.getElementById('str-lvl').innerText = strLvl;
-        
         const sizeCost = sizeLvl * 50;
         const strCost = strLvl * 75;
         document.getElementById('up-size').innerText = `${sizeCost} 💰`;
         document.getElementById('up-str').innerText = `${strCost} 💰`;
         document.getElementById('up-size').disabled = coins < sizeCost;
         document.getElementById('up-str').disabled = coins < strCost;
-
         localStorage.setItem('scratcher_coins', coins);
         localStorage.setItem('size_lvl', sizeLvl);
         localStorage.setItem('str_lvl', strLvl);
@@ -221,10 +221,8 @@
         if (coins < 2) return alert("Not enough coins!");
         coins -= 2;
         updateUI();
-        
         canvas.style.transition = "none";
         canvas.style.opacity = "1";
-        
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = '#cbd5e1'; 
         ctx.fillRect(0, 0, 320, 320);
@@ -232,19 +230,17 @@
         for(let i=0; i<800; i++) {
             ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
         }
-
         const res = [];
         document.querySelectorAll('.prize-cell').forEach(c => {
             const s = symbols[Math.floor(Math.random() * symbols.length)];
             c.innerText = s; res.push(s);
         });
-
         const counts = {};
         res.forEach(s => counts[s] = (counts[s] || 0) + 1);
         const maxMatch = Math.max(...Object.values(counts));
         pendingWin = maxMatch >= 3 ? 20 : (maxMatch === 2 ? 5 : 0);
         
-        // Setup Modal content here
+        // Modal update logic fixed
         if (pendingWin > 0) {
             document.getElementById('modal-title').innerText = "WINNER!";
             document.getElementById('modal-msg').innerHTML = `Found ${maxMatch} matches!<br><span class="win-amount">+${pendingWin} 💰</span>`;
@@ -264,15 +260,30 @@
         const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
 
         ctx.globalCompositeOperation = 'destination-out';
+        
+        // Bristle Brush Variables
         const baseRadius = 10 + (sizeLvl * 2);
         const bristles = 5 + strLvl;
+
+        // SMOOTHING LOGIC: Line-based interpolation
+        ctx.lineWidth = baseRadius;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+
+        // Draw multiple jittered lines to maintain bristle effect while smoothing gaps
         for(let i=0; i < bristles; i++) {
-            const offsetX = (Math.random() - 0.5) * (baseRadius);
-            const offsetY = (Math.random() - 0.5) * (baseRadius);
+            const offsetX = (Math.random() - 0.5) * baseRadius;
+            const offsetY = (Math.random() - 0.5) * baseRadius;
+            
             ctx.beginPath();
-            ctx.arc(x + offsetX, y + offsetY, baseRadius/2, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.moveTo(lastX + offsetX, lastY + offsetY);
+            ctx.lineTo(x + offsetX, y + offsetY);
+            ctx.stroke();
         }
+
+        // Update previous coordinates
+        lastX = x;
+        lastY = y;
 
         createParticles(x, y);
         if (Math.random() > 0.98) checkReveal();
@@ -282,7 +293,6 @@
         const data = ctx.getImageData(0,0,320,320).data;
         let trans = 0;
         for(let i=3; i<data.length; i+=4) if(data[i] === 0) trans++;
-        
         const threshold = 0.60 - (strLvl * 0.01); 
         if ((trans / (320*320)) > threshold) {
             cardActive = false;
@@ -303,12 +313,20 @@
         localStorage.setItem('last_login_time', Date.now().toString());
     }
 
-    canvas.addEventListener('mousedown', () => isDrawing = true);
+    function startDrawing(e) {
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        lastX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        lastY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+        scratch(e);
+    }
+
+    canvas.addEventListener('mousedown', startDrawing);
     window.addEventListener('mouseup', () => isDrawing = false);
     canvas.addEventListener('mousemove', scratch);
-    canvas.addEventListener('touchstart', (e) => { isDrawing = true; scratch(e); });
+    canvas.addEventListener('touchstart', (e) => { startDrawing(e); }, {passive: false});
     canvas.addEventListener('touchend', () => isDrawing = false);
-    canvas.addEventListener('touchmove', scratch);
+    canvas.addEventListener('touchmove', (e) => { scratch(e); }, {passive: false});
 </script>
 </body>
 </html>
