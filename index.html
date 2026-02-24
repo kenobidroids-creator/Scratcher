@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scratch Inc.</title>
+    <title>Scratch Inc. - Roguelike</title>
     <style>
         :root {
             --bg-deep: #0f172a;
@@ -34,6 +34,17 @@
             font-weight: bold; color: var(--text-gold); font-size: 1.2rem;
         }
 
+        /* NEW: Ticket Tabs UI */
+        .ticket-menu {
+            display: flex; gap: 8px; margin-bottom: 15px; width: 320px;
+        }
+        .ticket-tab {
+            flex: 1; padding: 10px 5px; border-radius: 12px; background: #334155;
+            border: 2px solid transparent; cursor: pointer; text-align: center;
+            font-size: 0.75rem; font-weight: bold; color: #94a3b8; transition: 0.2s;
+        }
+        .ticket-tab.active { border-color: var(--accent-blue); background: #1e293b; color: var(--accent-blue); }
+
         .card-container {
             position: relative; width: 320px; height: 320px;
             background: var(--card-white); border-radius: 24px; 
@@ -42,20 +53,16 @@
         }
 
         .prize-grid {
-            display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
-            width: 100%; height: 100%; position: absolute;
+            display: grid; width: 100%; height: 100%; position: absolute;
+            grid-template-columns: repeat(2, 1fr); /* Defaults to 2x2 */
         }
 
         .prize-cell {
             display: flex; align-items: center; justify-content: center;
-            font-size: 3.5rem; border: 1px solid #e2e8f0; color: #334155;
+            font-size: 2.5rem; border: 1px solid #e2e8f0; color: #334155;
         }
 
-        canvas { 
-            position: absolute; top: 0; left: 0; 
-            cursor: crosshair; z-index: 10; touch-action: none; 
-        }
-
+        canvas { position: absolute; top: 0; left: 0; cursor: crosshair; z-index: 10; touch-action: none; }
         #particle-canvas { pointer-events: none; z-index: 20; }
 
         .btn-primary { 
@@ -64,7 +71,6 @@
             font-weight: bold; font-size: 1.1rem; margin-top: 20px;
             box-shadow: 0 4px 0 #15803d; transition: all 0.1s;
         }
-
         .btn-primary:active { transform: translateY(2px); box-shadow: 0 2px 0 #15803d; }
         .btn-primary:disabled { background: #475569; box-shadow: 0 4px 0 #334155; opacity: 0.6; }
 
@@ -74,27 +80,16 @@
             padding: 20px; margin-top: 30px; border: 1px solid rgba(255, 255, 255, 0.1);
             box-sizing: border-box;
         }
-
         .shop-header { color: var(--accent-blue); margin: 0 0 15px 0; font-size: 1rem; text-transform: uppercase; letter-spacing: 1px; }
-
         .upgrade-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .upgrade-info p { margin: 0; font-size: 0.85rem; color: #94a3b8; }
-        .upgrade-info b { color: white; display: block; }
-
-        .btn-upgrade {
-            background: var(--accent-blue); color: #0f172a; border: none;
-            padding: 8px 12px; border-radius: 10px; font-weight: bold; 
-            cursor: pointer; min-width: 80px;
-        }
+        .btn-upgrade { background: var(--accent-blue); color: #0f172a; border: none; padding: 8px 12px; border-radius: 10px; font-weight: bold; cursor: pointer; min-width: 80px; }
         .btn-upgrade:disabled { background: #475569; color: #94a3b8; }
 
         .modal {
-            display: none; position: fixed; 
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: white; color: #0f172a; 
-            padding: 30px; border-radius: 24px; 
-            z-index: 100; text-align: center;
-            width: 260px; box-shadow: 0 0 100px rgba(0,0,0,0.8);
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; color: #0f172a; padding: 30px; border-radius: 24px; 
+            z-index: 100; text-align: center; width: 260px; box-shadow: 0 0 100px rgba(0,0,0,0.8);
         }
         .win-amount { color: var(--accent-green); font-weight: bold; font-size: 1.4rem; display: block; margin-top: 5px; }
     </style>
@@ -104,6 +99,12 @@
     <div class="header">
         <div style="font-weight: bold; font-size: 1.4rem;">Scratch Inc.</div>
         <div class="stats-badge">💰 <span id="coin-count">--</span></div>
+    </div>
+
+    <div class="ticket-menu">
+        <div class="ticket-tab active" onclick="selectTicket('mini', this)">MINI (2💰)</div>
+        <div class="ticket-tab" onclick="selectTicket('mega', this)">MEGA (10💰)</div>
+        <div class="ticket-tab" onclick="selectTicket('ultra', this)">ULTRA (50💰)</div>
     </div>
 
     <div class="card-container">
@@ -136,7 +137,14 @@
     </div>
 
 <script>
-    // --- State & Variables ---
+    // --- TICKET DATA ---
+    const TICKET_TYPES = {
+        mini:  { cost: 2,  cols: 2, rows: 2, win3: 20, win2: 5,  pair2: 15 },
+        mega:  { cost: 10, cols: 3, rows: 3, win3: 100, win2: 20, pair2: 50 },
+        ultra: { cost: 50, cols: 4, rows: 4, win3: 500, win2: 100, pair2: 250 }
+    };
+
+    let currentType = 'mini';
     let coins = parseInt(localStorage.getItem('scratcher_coins')) || 10;
     let sizeLvl = parseInt(localStorage.getItem('size_lvl')) || 1;
     let strLvl = parseInt(localStorage.getItem('str_lvl')) || 1;
@@ -147,48 +155,91 @@
     const pCanvas = document.getElementById('particle-canvas');
     const pCtx = pCanvas.getContext('2d');
     
-    let isDrawing = false;
-    let lastX = 0, lastY = 0;
-    let cardActive = false;
-    let pendingWin = 0;
-    let particles = [];
+    let isDrawing = false, lastX = 0, lastY = 0, cardActive = false, pendingWin = 0, particles = [];
 
-    // --- Setup ---
     updateUI();
-    handleRecharge();
+    handleRecharge(); //
     animateParticles();
+
+    function selectTicket(type, el) {
+        if (cardActive) return;
+        currentType = type;
+        const ticket = TICKET_TYPES[type];
+        
+        document.querySelectorAll('.ticket-tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById('buy-btn').innerText = `BUY ${type.toUpperCase()} (${ticket.cost} 💰)`;
+
+        // Update Grid
+        const grid = document.getElementById('prize-grid');
+        grid.style.gridTemplateColumns = `repeat(${ticket.cols}, 1fr)`;
+        grid.innerHTML = '';
+        for(let i=0; i < (ticket.cols * ticket.rows); i++) {
+            const cell = document.createElement('div');
+            cell.className = 'prize-cell';
+            cell.innerText = '?';
+            grid.appendChild(cell);
+        }
+    }
 
     function updateUI() {
         document.getElementById('coin-count').innerText = coins;
         document.getElementById('size-lvl').innerText = sizeLvl;
         document.getElementById('str-lvl').innerText = strLvl;
-        
-        const sizeCost = sizeLvl * 50;
-        const strCost = strLvl * 75;
-        document.getElementById('up-size').innerText = `${sizeCost} 💰`;
-        document.getElementById('up-str').innerText = `${strCost} 💰`;
-        document.getElementById('up-size').disabled = coins < sizeCost;
-        document.getElementById('up-str').disabled = coins < strCost;
-
+        const sCost = sizeLvl * 50, stCost = strLvl * 75;
+        document.getElementById('up-size').innerText = `${sCost} 💰`;
+        document.getElementById('up-str').innerText = `${stCost} 💰`;
+        document.getElementById('up-size').disabled = coins < sCost;
+        document.getElementById('up-str').disabled = coins < stCost;
         localStorage.setItem('scratcher_coins', coins);
         localStorage.setItem('size_lvl', sizeLvl);
         localStorage.setItem('str_lvl', strLvl);
     }
 
-    function upgrade(type) {
-        if (type === 'size') {
-            const cost = sizeLvl * 50;
-            if (coins >= cost) { coins -= cost; sizeLvl++; }
-        } else {
-            const cost = strLvl * 75;
-            if (coins >= cost) { coins -= cost; strLvl++; }
-        }
+    function buyCard() {
+        const ticket = TICKET_TYPES[currentType];
+        if (coins < ticket.cost) return alert("Not enough coins!");
+        coins -= ticket.cost;
         updateUI();
+        
+        canvas.style.transition = "none"; canvas.style.opacity = "1";
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#cbd5e1'; ctx.fillRect(0, 0, 320, 320);
+        ctx.fillStyle = '#94a3b8'; for(let i=0; i<800; i++) ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
+
+        const res = [];
+        document.querySelectorAll('.prize-cell').forEach(c => {
+            const s = symbols[Math.floor(Math.random() * symbols.length)];
+            c.innerText = s; res.push(s);
+        });
+
+        // TWO PAIR & MATCH LOGIC
+        const counts = {}; res.forEach(s => counts[s] = (counts[s] || 0) + 1);
+        const valCounts = Object.values(counts);
+        const maxMatch = Math.max(...valCounts);
+        const numPairs = valCounts.filter(v => v === 2).length;
+
+        if (maxMatch >= 3) {
+            pendingWin = ticket.win3;
+            document.getElementById('modal-title').innerText = "WINNER!";
+        } else if (numPairs >= 2) { // THE TWO PAIR COMBO
+            pendingWin = ticket.pair2;
+            document.getElementById('modal-title').innerText = "COMBO WIN!";
+        } else if (maxMatch === 2) {
+            pendingWin = ticket.win2;
+            document.getElementById('modal-title').innerText = "WINNER!";
+        } else {
+            pendingWin = 0;
+            document.getElementById('modal-title').innerText = "TRY AGAIN";
+        }
+        
+        document.getElementById('modal-msg').innerHTML = pendingWin > 0 ? `Matched Symbols!<br><span class="win-amount">+${pendingWin} 💰</span>` : "No matches this time.";
+        cardActive = true; document.getElementById('buy-btn').disabled = true;
     }
 
+    // --- RECHARGE LOGIC ---
     function handleRecharge() {
-        const now = Date.now();
-        const last = parseInt(localStorage.getItem('last_login_time')) || now;
+        const now = Date.now(), last = parseInt(localStorage.getItem('last_login_time')) || now;
         const blocks = Math.floor(((now - last) / (1000 * 60 * 60)) / 4);
         if (blocks > 0) {
             const bonus = Math.min(blocks * 4, 12);
@@ -199,132 +250,68 @@
         }
     }
 
-    // --- Particle FX ---
-    function createParticles(x, y) {
-        for(let i=0; i < (2 * strLvl); i++) {
-            particles.push({
-                x: x + (Math.random()-0.5)*10, y: y + (Math.random()-0.5)*10,
-                vx: (Math.random() - 0.5) * 2, vy: Math.random() * 3,
-                life: 30, size: 1 + Math.random() * 2
-            });
-        }
-    }
-
-    function animateParticles() {
-        pCtx.clearRect(0, 0, 320, 320);
-        particles.forEach((p, i) => {
-            p.x += p.vx; p.y += p.vy; p.life--;
-            pCtx.fillStyle = `rgba(140, 140, 140, ${p.life/30})`;
-            pCtx.fillRect(p.x, p.y, p.size, p.size);
-            if(p.life <= 0) particles.splice(i, 1);
-        });
-        requestAnimationFrame(animateParticles);
-    }
-
-    // --- Scratch Logic ---
-    function buyCard() {
-        if (coins < 2) return alert("Not enough coins!");
-        coins -= 2;
-        updateUI();
-        
-        canvas.style.transition = "none";
-        canvas.style.opacity = "1";
-        
-        // Foil Texture
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = '#cbd5e1'; 
-        ctx.fillRect(0, 0, 320, 320);
-        ctx.fillStyle = '#94a3b8'; 
-        for(let i=0; i<800; i++) {
-            ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
-        }
-
-        const res = [];
-        document.querySelectorAll('.prize-cell').forEach(c => {
-            const s = symbols[Math.floor(Math.random() * symbols.length)];
-            c.innerText = s; res.push(s);
-        });
-
-        const counts = {};
-        res.forEach(s => counts[s] = (counts[s] || 0) + 1);
-        const maxMatch = Math.max(...Object.values(counts));
-        pendingWin = maxMatch >= 3 ? 20 : (maxMatch === 2 ? 5 : 0);
-        
-        if (pendingWin > 0) {
-            document.getElementById('modal-title').innerText = "WINNER!";
-            document.getElementById('modal-msg').innerHTML = `Found ${maxMatch} matches!<br><span class="win-amount">+${pendingWin} 💰</span>`;
-        } else {
-            document.getElementById('modal-title').innerText = "TRY AGAIN";
-            document.getElementById('modal-msg').innerText = "Better luck on the next one!";
-        }
-        
-        cardActive = true;
-        document.getElementById('buy-btn').disabled = true;
-    }
-
+    // --- SCRATCH & PARTICLES (Preserved from original) ---
     function scratch(e) {
         if (!isDrawing || !cardActive) return;
         const rect = canvas.getBoundingClientRect();
         const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
         const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-
         ctx.globalCompositeOperation = 'destination-out';
-        const baseRadius = 10 + (sizeLvl * 2);
-        const bristles = 5 + strLvl;
-
-        // Smooth Interpolation
-        ctx.lineWidth = baseRadius;
-        ctx.lineJoin = "round"; ctx.lineCap = "round";
-
-        for(let i=0; i < bristles; i++) {
-            const offsetX = (Math.random() - 0.5) * baseRadius;
-            const offsetY = (Math.random() - 0.5) * baseRadius;
-            ctx.beginPath();
-            ctx.moveTo(lastX + offsetX, lastY + offsetY);
-            ctx.lineTo(x + offsetX, y + offsetY);
-            ctx.stroke();
+        const rad = 10 + (sizeLvl * 2);
+        ctx.lineWidth = rad; ctx.lineJoin = "round"; ctx.lineCap = "round";
+        for(let i=0; i < 5+strLvl; i++) {
+            const ox = (Math.random()-0.5)*rad, oy = (Math.random()-0.5)*rad;
+            ctx.beginPath(); ctx.moveTo(lastX+ox, lastY+oy); ctx.lineTo(x+ox, y+oy); ctx.stroke();
         }
-
-        lastX = x; lastY = y;
-        createParticles(x, y);
+        lastX = x; lastY = y; createParticles(x, y);
         if (Math.random() > 0.98) checkReveal();
     }
 
     function checkReveal() {
         const data = ctx.getImageData(0,0,320,320).data;
-        let trans = 0;
-        for(let i=3; i<data.length; i+=4) if(data[i] === 0) trans++;
-        
-        const threshold = 0.60 - (strLvl * 0.01); 
-        if ((trans / (320*320)) > threshold) {
-            cardActive = false;
-            canvas.style.transition = "opacity 1.2s";
-            canvas.style.opacity = "0";
-            setTimeout(() => {
-                coins += pendingWin;
-                updateUI();
-                document.getElementById('result-modal').style.display = 'block';
-            }, 1200);
+        let trans = 0; for(let i=3; i<data.length; i+=4) if(data[i] === 0) trans++;
+        if ((trans / (320*320)) > (0.60 - (strLvl * 0.01))) {
+            cardActive = false; canvas.style.transition = "opacity 1.2s"; canvas.style.opacity = "0";
+            setTimeout(() => { coins += pendingWin; updateUI(); document.getElementById('result-modal').style.display = 'block'; }, 1200);
         }
     }
 
     function closeModal() {
         document.getElementById('result-modal').style.display = 'none';
         document.getElementById('buy-btn').disabled = false;
-        
-        // Reset symbols to ? between rounds
         document.querySelectorAll('.prize-cell').forEach(c => c.innerText = "?");
-        
         ctx.clearRect(0,0,320,320);
         localStorage.setItem('last_login_time', Date.now().toString());
     }
 
+    function upgrade(type) {
+        const cost = type === 'size' ? sizeLvl * 50 : strLvl * 75;
+        if (coins >= cost) {
+            coins -= cost;
+            if (type === 'size') sizeLvl++; else strLvl++;
+            updateUI();
+        }
+    }
+
     function startDrawing(e) {
-        isDrawing = true;
-        const rect = canvas.getBoundingClientRect();
+        isDrawing = true; const rect = canvas.getBoundingClientRect();
         lastX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
         lastY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
         scratch(e);
+    }
+
+    function createParticles(x, y) {
+        for(let i=0; i < (2 * strLvl); i++) particles.push({ x: x+(Math.random()-0.5)*10, y: y+(Math.random()-0.5)*10, vx: (Math.random()-0.5)*2, vy: Math.random()*3, life: 30, size: 1+Math.random()*2 });
+    }
+
+    function animateParticles() {
+        pCtx.clearRect(0, 0, 320, 320);
+        particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy; p.life--;
+            pCtx.fillStyle = `rgba(140, 140, 140, ${p.life/30})`; pCtx.fillRect(p.x, p.y, p.size, p.size);
+            if(p.life <= 0) particles.splice(i, 1);
+        });
+        requestAnimationFrame(animateParticles);
     }
 
     canvas.addEventListener('mousedown', startDrawing);
