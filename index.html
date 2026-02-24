@@ -3,22 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scratcher Sim</title>
+    <title>Scratcher Sim - Camera Follow</title>
     <style>
         :root { --primary: #2196F3; --accent: #4CAF50; --danger: #f44336; --dark: #1a1a1a; }
         body { 
-            margin: 0; overflow: hidden; background: #111; 
+            margin: 0; overflow: hidden; background: #000; 
             font-family: 'Segoe UI', sans-serif; touch-action: none; 
             display: flex; flex-direction: column; height: 100dvh; 
         }
-        #gameCanvas { flex: 1; display: block; background: #1a1a1a; max-width: 100%; max-height: 100%; margin: auto; }
+        #gameCanvas { flex: 1; display: block; background: #1a1a1a; }
         
-        #top-bar { height: 50px; background: rgba(0,0,0,0.9); display: flex; justify-content: space-around; align-items: center; color: white; border-bottom: 2px solid #444; flex-shrink: 0; }
-        #bottom-bar { height: 80px; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; gap: 15px; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); }
+        #top-bar { height: 50px; background: rgba(0,0,0,0.9); display: flex; justify-content: space-around; align-items: center; color: white; border-bottom: 2px solid #444; z-index: 10; }
+        #bottom-bar { height: 80px; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; gap: 15px; padding-bottom: env(safe-area-inset-bottom); z-index: 10; }
         
         #build-confirm { display: none; position: absolute; gap: 10px; z-index: 100; }
         button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; transition: transform 0.1s; }
-        button:active { transform: scale(0.95); }
         .btn-main { background: var(--primary); }
         .btn-action { background: var(--accent); padding: 15px 30px; font-size: 18px; }
         .btn-confirm { background: var(--accent); }
@@ -28,8 +27,7 @@
 <body>
 
 <div id="top-bar">
-    <div id="money-display">Cash: $0</div>
-    <div id="stock-display">Tickets: 0</div>
+    <div id="money-display">Cash: $100</div>
     <button class="btn-main" onclick="toggleBuildMode()">Build Mode</button>
 </div>
 
@@ -48,10 +46,9 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    // Global Settings
-    let TILE = 40; 
-    const COLS = 10, ROWS = 10;
-    let offX = 0, offY = 0;
+    // Grid Settings
+    let TILE = 60; // Larger tiles feel better for mobile camera
+    const COLS = 12, ROWS = 20; // Taller room to demonstrate the scroll
     const camera = { x: 0, y: 0 };
 
     let gameState = {
@@ -60,24 +57,19 @@
         movingObj: null,
         isPlaced: false,
         tempPos: { gX: 0, gY: 0 },
-        player: { x: 100, y: 100, tX: 100, tY: 100, holding: 0, maxHolding: 5 },
-        counter: { gridX: 7, gridY: 3, w: 1, h: 3, color: '#8d6e63' },
+        player: { x: 300, y: 300, tX: 300, tY: 300, holding: 0 },
+        counter: { gridX: 5, gridY: 2, w: 1, h: 3, color: '#8d6e63' },
         shelves: [
-            { id: 1, gridX: 2, gridY: 2, w: 2, h: 1, stock: 10, color: '#5d4037' }
+            { id: 1, gridX: 2, gridY: 5, w: 2, h: 1, color: '#5d4037' }
         ],
         deliveries: []
     };
 
     function resize() {
-        const isPortrait = window.innerHeight > window.innerWidth;
-        canvas.width = isPortrait ? window.innerWidth : Math.min(window.innerWidth, 800);
-        // Cap mobile height to prevent stretching
-        canvas.height = isPortrait ? Math.min(window.innerHeight - 150, canvas.width * 1.5) : (window.innerHeight - 150);
-
-        // Update Global TILE
-        TILE = isPortrait ? Math.floor(canvas.width / 10) : 40;
-        offX = (canvas.width - (COLS * TILE)) / 2;
-        offY = isPortrait ? 100 : (canvas.height - (ROWS * TILE)) / 2;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight - 130; // Accounting for bars
+        // Adjust TILE based on width for mobile responsiveness
+        TILE = window.innerWidth < 600 ? Math.floor(window.innerWidth / 8) : 60;
     }
 
     function toggleBuildMode() {
@@ -92,15 +84,14 @@
         if (p.holding > 0) {
             gameState.deliveries.push({ x: p.x, y: p.y, qty: p.holding });
             p.holding = 0;
-            return;
+        } else {
+            gameState.deliveries.forEach((d, i) => {
+                if (Math.hypot(p.x - d.x, p.y - d.y) < 60) {
+                    p.holding = 5;
+                    gameState.deliveries.splice(i, 1);
+                }
+            });
         }
-        // Pickup logic
-        gameState.deliveries.forEach((d, i) => {
-            if (Math.hypot(p.x - d.x, p.y - d.y) < 50) {
-                p.holding = d.qty;
-                gameState.deliveries.splice(i, 1);
-            }
-        });
     }
 
     function confirmPlacement() {
@@ -121,99 +112,90 @@
 
     function update() {
         const p = gameState.player;
-        p.x += (p.tX - p.x) * 0.1;
-        p.y += (p.tY - p.y) * 0.1;
+        // Smooth movement
+        p.x += (p.tX - p.x) * 0.12;
+        p.y += (p.tY - p.y) * 0.12;
 
-        // Camera Update: Keep player centered 
-        camera.x = p.x - canvas.width / 2;
-        camera.y = p.y - canvas.height / 2;
+        // CAMERA FOLLOW WITH BOUNDARIES
+        let targetX = p.x - canvas.width / 2;
+        let targetY = p.y - canvas.height / 2;
+
+        const worldW = COLS * TILE;
+        const worldH = ROWS * TILE;
+
+        // Clamp camera so it doesn't show the black void
+        camera.x = Math.max(0, Math.min(targetX, worldW - canvas.width));
+        camera.y = Math.max(0, Math.min(targetY, worldH - canvas.height));
     }
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const isPortrait = window.innerHeight > window.innerWidth;
-        const shopWidth = COLS * TILE;
-        const sidewalkSize = isPortrait ? 150 : 80;
-
-        // Static Background (Doesn't move with camera)
-        ctx.fillStyle = "#222";
-        ctx.fillRect(0,0, canvas.width, canvas.height);
-
+        
         ctx.save();
         ctx.translate(-camera.x, -camera.y);
 
         // Shop Floor
-        ctx.fillStyle = "#333";
-        ctx.fillRect(offX, offY, shopWidth, ROWS * TILE);
-
-        // Sidewalk
-        ctx.fillStyle = "#555";
-        ctx.fillRect(offX, offY - sidewalkSize, shopWidth, sidewalkSize);
+        ctx.fillStyle = "#222";
+        ctx.fillRect(0, 0, COLS * TILE, ROWS * TILE);
 
         // Grid
-        ctx.strokeStyle = "rgba(255,255,255,0.05)";
+        ctx.strokeStyle = "#333";
+        ctx.lineWidth = 1;
         for(let i=0; i<=COLS; i++) {
-            ctx.beginPath(); ctx.moveTo(offX + i*TILE, offY); ctx.lineTo(offX + i*TILE, offY + ROWS*TILE); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(i*TILE, 0); ctx.lineTo(i*TILE, ROWS*TILE); ctx.stroke();
         }
-        for(let i=0; i<=ROWS; i++) {
-            ctx.beginPath(); ctx.moveTo(offX, offY + i*TILE); ctx.lineTo(offX + shopWidth, offY + i*TILE); ctx.stroke();
+        for(let j=0; j<=ROWS; j++) {
+            ctx.beginPath(); ctx.moveTo(0, j*TILE); ctx.lineTo(COLS*TILE, j*TILE); ctx.stroke();
         }
 
-        // Draw Counter
+        // Counter
         const c = gameState.counter;
         ctx.fillStyle = c.color;
-        ctx.fillRect(offX + c.gridX * TILE, offY + c.gridY * TILE, c.w * TILE, c.h * TILE);
+        ctx.fillRect(c.gridX * TILE, c.gridY * TILE, c.w * TILE, c.h * TILE);
 
-        // Draw Shelves
+        // Shelves
         gameState.shelves.forEach(s => {
             ctx.fillStyle = s.color;
-            ctx.fillRect(offX + s.gridX * TILE, offY + s.gridY * TILE, s.w * TILE, s.h * TILE);
+            ctx.fillRect(s.gridX * TILE, s.gridY * TILE, s.w * TILE, s.h * TILE);
         });
-
-        // Ghost Object (Build Mode)
-        if (gameState.movingObj && !gameState.isPlaced) {
-            ctx.globalAlpha = 0.5;
-            ctx.fillStyle = "cyan";
-            // Logic to track mouse needed for ghost drawing
-            ctx.globalAlpha = 1.0;
-        }
 
         // Deliveries
         ctx.fillStyle = "#fb8c00";
         gameState.deliveries.forEach(d => {
-            ctx.fillRect(d.x - 10, d.y - 10, 20, 20);
+            ctx.fillRect(d.x - 15, d.y - 15, 30, 30);
         });
 
         // Player
         ctx.fillStyle = "#2196F3";
-        ctx.beginPath(); ctx.arc(gameState.player.x, gameState.player.y, 15, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(gameState.player.x, gameState.player.y, 20, 0, Math.PI*2); ctx.fill();
         if(gameState.player.holding > 0) {
-            ctx.fillStyle = "#fb8c00"; ctx.fillRect(gameState.player.x - 8, gameState.player.y - 25, 16, 16);
+            ctx.fillStyle = "#fb8c00"; ctx.fillRect(gameState.player.x - 10, gameState.player.y - 45, 20, 20);
         }
 
         ctx.restore();
-
-        // UI Updates
+        
         document.getElementById('money-display').innerText = `Cash: $${gameState.money}`;
     }
 
     function handleInput(clientX, clientY) {
         const rect = canvas.getBoundingClientRect();
-        // Adjust for Camera
+        
+        // CONVERT SCREEN CLICK TO WORLD POSITION
         const worldX = (clientX - rect.left) + camera.x;
         const worldY = (clientY - rect.top) + camera.y;
         
-        const gX = Math.floor((worldX - offX) / TILE);
-        const gY = Math.floor((worldY - offY) / TILE);
+        const gX = Math.floor(worldX / TILE);
+        const gY = Math.floor(worldY / TILE);
 
         if (gameState.mode === 'BUILD') {
             if (!gameState.movingObj) {
-                // Selection Logic
+                // Check Counter
                 if (gX >= gameState.counter.gridX && gX < gameState.counter.gridX + gameState.counter.w &&
                     gY >= gameState.counter.gridY && gY < gameState.counter.gridY + gameState.counter.h) {
                     gameState.movingObj = gameState.counter;
                     return;
                 }
+                // Check Shelves
                 for (let s of gameState.shelves) {
                     if (gX >= s.gridX && gX < s.gridX + s.w && gY >= s.gridY && gY < s.gridY + s.h) {
                         gameState.movingObj = s;
@@ -225,11 +207,12 @@
                 gameState.isPlaced = true;
                 const ui = document.getElementById('build-confirm');
                 ui.style.display = 'flex';
-                ui.style.left = (clientX) + 'px';
+                ui.style.left = clientX + 'px';
                 ui.style.top = (clientY - 60) + 'px';
                 return;
             }
         }
+        
         gameState.player.tX = worldX;
         gameState.player.tY = worldY;
     }
@@ -242,19 +225,19 @@
     canvas.addEventListener('touchstart', (e) => {
         e.preventDefault();
         handleInput(e.touches[0].clientX, e.touches[0].clientY);
-    });
+    }, {passive: false});
 
     window.addEventListener('resize', resize);
     window.oncontextmenu = (e) => e.preventDefault();
 
-    function gameLoop() {
+    function loop() {
         update();
         draw();
-        requestAnimationFrame(gameLoop);
+        requestAnimationFrame(loop);
     }
 
     resize();
-    gameLoop();
+    loop();
 </script>
 
 </body>
