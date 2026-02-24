@@ -3,17 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scratcher Sim - Camera Follow</title>
+    <title>Scratcher Sim - Stable</title>
     <style>
-        :root { --primary: #2196F3; --accent: #4CAF50; --danger: #f44336; --dark: #1a1a1a; }
-        body { 
-            margin: 0; overflow: hidden; background: #000; 
-            font-family: 'Segoe UI', sans-serif; touch-action: none; 
-            display: flex; flex-direction: column; height: 100dvh; 
-        }
-        canvas { flex: 1; display: block; background: #1a1a1a; cursor: crosshair; }
-        #top-bar { height: 50px; background: #000; display: flex; justify-content: space-around; align-items: center; color: white; border-bottom: 2px solid #333; z-index: 10; }
-        #bottom-bar { height: 80px; background: #000; display: flex; justify-content: center; align-items: center; padding-bottom: env(safe-area-inset-bottom); z-index: 10; }
+        :root { --primary: #2196F3; --accent: #4CAF50; --danger: #f44336; }
+        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; touch-action: none; display: flex; flex-direction: column; height: 100vh; }
+        canvas { flex: 1; display: block; background: #1a1a1a; }
+        #top-bar { height: 50px; background: #000; display: flex; justify-content: space-around; align-items: center; color: white; border-bottom: 2px solid #333; }
+        #bottom-bar { height: 80px; background: #000; display: flex; justify-content: center; align-items: center; padding-bottom: env(safe-area-inset-bottom); }
         #build-confirm { display: none; position: absolute; gap: 10px; z-index: 100; }
         button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; }
         .btn-main { background: var(--primary); }
@@ -42,10 +38,10 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    // Grid & Camera Config
-    let TILE = 60; 
-    const COLS = 12, ROWS = 20; // 20 Rows ensures we have to scroll down
-    const camera = { x: 0, y: 0 };
+    // 1. GLOBAL VARIABLES (Using 'let' so resize works)
+    let TILE = 50; 
+    const COLS = 10, ROWS = 10;
+    let offX = 0, offY = 0;
 
     let gameState = {
         money: 100,
@@ -53,20 +49,35 @@
         movingObj: null,
         isPlaced: false,
         tempPos: { gX: 0, gY: 0 },
-        player: { x: 300, y: 300, tX: 300, tY: 300, holding: 0 },
-        counter: { gridX: 5, gridY: 2, w: 1, h: 3, color: '#8d6e63' },
-        shelves: [{ id: 1, gridX: 3, gridY: 8, w: 2, h: 1, color: '#5d4037' }],
+        player: { x: 0, y: 0, tX: 0, tY: 0, holding: 0 },
+        // MOVED HIGHER: gridY is now 1 and 2 instead of 7/8
+        counter: { gridX: 4, gridY: 1, w: 2, h: 1, color: '#8d6e63' },
+        shelves: [{ id: 1, gridX: 2, gridY: 3, w: 2, h: 1, color: '#5d4037' }],
         deliveries: []
     };
 
     function resize() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight - 130;
-        TILE = window.innerWidth < 600 ? Math.floor(window.innerWidth / 8) : 60;
+        
+        // Dynamic tile size that fits the screen width
+        TILE = Math.floor(canvas.width / (COLS + 2));
+        
+        offX = (canvas.width - (COLS * TILE)) / 2;
+        // Keep the shop near the top so it's reachable
+        offY = 40; 
+
+        // Initial player placement
+        if (gameState.player.x === 0) {
+            gameState.player.x = offX + 5 * TILE;
+            gameState.player.y = offY + 8 * TILE;
+            gameState.player.tX = gameState.player.x;
+            gameState.player.tY = gameState.player.y;
+        }
     }
 
     function toggleBuildMode() {
-        gameState.mode = gameState.mode === 'PLAY' ? 'BUILD' : 'PLAY';
+        gameState.mode = (gameState.mode === 'PLAY') ? 'BUILD' : 'PLAY';
         gameState.movingObj = null;
         gameState.isPlaced = false;
         document.getElementById('build-confirm').style.display = 'none';
@@ -105,82 +116,73 @@
 
     function update() {
         const p = gameState.player;
-        p.x += (p.tX - p.x) * 0.12;
-        p.y += (p.tY - p.y) * 0.12;
-
-        // CAMERA CLAMPING (Reveals bottom part of the room)
-        let targetX = p.x - canvas.width / 2;
-        let targetY = p.y - canvas.height / 2;
-
-        const worldW = COLS * TILE;
-        const worldH = ROWS * TILE;
-
-        // Stop camera from showing outside the shop boundaries
-        camera.x = Math.max(0, Math.min(targetX, worldW - canvas.width));
-        camera.y = Math.max(0, Math.min(targetY, worldH - canvas.height));
+        p.x += (p.tX - p.x) * 0.15;
+        p.y += (p.tY - p.y) * 0.15;
     }
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        ctx.save();
-        ctx.translate(-camera.x, -camera.y);
+        // Define shopWidth inside draw to prevent reference errors
+        const shopWidth = COLS * TILE;
 
-        // Shop Floor (Starts at 0,0 World Space)
+        // Shop Floor
         ctx.fillStyle = "#222";
-        ctx.fillRect(0, 0, COLS * TILE, ROWS * TILE);
+        ctx.fillRect(offX, offY, shopWidth, ROWS * TILE);
 
-        // Grid Lines
+        // Grid
         ctx.strokeStyle = "#333";
         for(let i=0; i<=COLS; i++) {
-            ctx.beginPath(); ctx.moveTo(i*TILE, 0); ctx.lineTo(i*TILE, ROWS*TILE); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(offX + i*TILE, offY); ctx.lineTo(offX + i*TILE, offY + ROWS*TILE); ctx.stroke();
         }
         for(let j=0; j<=ROWS; j++) {
-            ctx.beginPath(); ctx.moveTo(0, j*TILE); ctx.lineTo(COLS*TILE, j*TILE); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(offX, offY + j*TILE); ctx.lineTo(offX + shopWidth, offY + j*TILE); ctx.stroke();
         }
 
-        // Counter
+        // Furniture
         const c = gameState.counter;
         ctx.fillStyle = c.color;
-        ctx.fillRect(c.gridX * TILE, c.gridY * TILE, c.w * TILE, c.h * TILE);
+        ctx.fillRect(offX + c.gridX * TILE, offY + c.gridY * TILE, c.w * TILE, c.h * TILE);
 
-        // Shelves
         gameState.shelves.forEach(s => {
             ctx.fillStyle = s.color;
-            ctx.fillRect(s.gridX * TILE, s.gridY * TILE, s.w * TILE, s.h * TILE);
+            ctx.fillRect(offX + s.gridX * TILE, offY + s.gridY * TILE, s.w * TILE, s.h * TILE);
+        });
+
+        // Deliveries
+        ctx.fillStyle = "#fb8c00";
+        gameState.deliveries.forEach(d => {
+            ctx.fillRect(d.x - 10, d.y - 10, 20, 20);
         });
 
         // Player
         ctx.fillStyle = "#2196F3";
-        ctx.beginPath(); ctx.arc(gameState.player.x, gameState.player.y, 20, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(gameState.player.x, gameState.player.y, 15, 0, Math.PI*2); ctx.fill();
 
-        ctx.restore();
-        
         document.getElementById('money-display').innerText = `Cash: $${gameState.money}`;
     }
 
     function handleInput(clientX, clientY) {
         const rect = canvas.getBoundingClientRect();
+        const mx = clientX - rect.left;
+        const my = clientY - rect.top;
         
-        // CONVERT SCREEN CLICK TO WORLD SPACE
-        const worldX = (clientX - rect.left) + camera.x;
-        const worldY = (clientY - rect.top) + camera.y;
-        
-        const gX = Math.floor(worldX / TILE);
-        const gY = Math.floor(worldY / TILE);
+        const gX = Math.floor((mx - offX) / TILE);
+        const gY = Math.floor((my - offY) / TILE);
 
         if (gameState.mode === 'BUILD') {
             if (!gameState.movingObj) {
-                // Selection logic must happen in World Space
+                // Check Counter selection
                 if (gX >= gameState.counter.gridX && gX < gameState.counter.gridX + gameState.counter.w &&
                     gY >= gameState.counter.gridY && gY < gameState.counter.gridY + gameState.counter.h) {
                     gameState.movingObj = gameState.counter;
-                    return;
+                    return; // Stop here!
                 }
+                // Check Shelves selection
                 for (let s of gameState.shelves) {
                     if (gX >= s.gridX && gX < s.gridX + s.w && gY >= s.gridY && gY < s.gridY + s.h) {
                         gameState.movingObj = s;
-                        return;
+                        return; // Stop here!
                     }
                 }
             } else if (!gameState.isPlaced) {
@@ -194,8 +196,8 @@
             }
         }
         
-        gameState.player.tX = worldX;
-        gameState.player.tY = worldY;
+        gameState.player.tX = mx;
+        gameState.player.tY = my;
     }
 
     canvas.addEventListener('mousedown', (e) => {
