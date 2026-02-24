@@ -2,225 +2,337 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scratcher Sim - Stable</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scratch Inc.</title>
     <style>
-        :root { --primary: #2196F3; --accent: #4CAF50; --danger: #f44336; }
-        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; touch-action: none; display: flex; flex-direction: column; height: 100vh; }
-        canvas { flex: 1; display: block; background: #1a1a1a; }
-        #top-bar { height: 50px; background: #000; display: flex; justify-content: space-around; align-items: center; color: white; border-bottom: 2px solid #333; }
-        #bottom-bar { height: 80px; background: #000; display: flex; justify-content: center; align-items: center; padding-bottom: env(safe-area-inset-bottom); }
-        #build-confirm { display: none; position: absolute; gap: 10px; z-index: 100; }
-        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; }
-        .btn-main { background: var(--primary); }
-        .btn-action { background: var(--accent); padding: 15px 40px; font-size: 1.2rem; }
+        :root {
+            --bg-deep: #0f172a;
+            --bg-slate: #1e293b;
+            --accent-blue: #38bdf8;
+            --accent-green: #22c55e;
+            --text-gold: #f1c40f;
+            --card-white: #f8fafc;
+        }
+
+        body { 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: radial-gradient(circle at top, var(--bg-slate), var(--bg-deep));
+            color: white; margin: 0; padding: 20px 0;
+            display: flex; flex-direction: column; align-items: center; 
+            min-height: 100vh; touch-action: pan-y;
+        }
+
+        .header {
+            width: 100%; max-width: 400px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0 20px; margin-bottom: 20px; box-sizing: border-box;
+        }
+
+        .stats-badge {
+            background: rgba(255, 255, 255, 0.1); padding: 8px 16px;
+            border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2);
+            font-weight: bold; color: var(--text-gold); font-size: 1.2rem;
+        }
+
+        .card-container {
+            position: relative; width: 320px; height: 320px;
+            background: var(--card-white); border-radius: 24px; 
+            overflow: hidden; border: 6px solid #334155;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .prize-grid {
+            display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+            width: 100%; height: 100%; position: absolute;
+        }
+
+        .prize-cell {
+            display: flex; align-items: center; justify-content: center;
+            font-size: 3.5rem; border: 1px solid #e2e8f0; color: #334155;
+        }
+
+        canvas { 
+            position: absolute; top: 0; left: 0; 
+            cursor: crosshair; z-index: 10; touch-action: none; 
+        }
+
+        #particle-canvas { pointer-events: none; z-index: 20; }
+
+        .btn-primary { 
+            background: var(--accent-green); color: white; border: none; 
+            padding: 16px; width: 320px; border-radius: 16px; cursor: pointer; 
+            font-weight: bold; font-size: 1.1rem; margin-top: 20px;
+            box-shadow: 0 4px 0 #15803d; transition: all 0.1s;
+        }
+
+        .btn-primary:active { transform: translateY(2px); box-shadow: 0 2px 0 #15803d; }
+        .btn-primary:disabled { background: #475569; box-shadow: 0 4px 0 #334155; opacity: 0.6; }
+
+        .shop-container {
+            width: 320px; background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px); border-radius: 24px;
+            padding: 20px; margin-top: 30px; border: 1px solid rgba(255, 255, 255, 0.1);
+            box-sizing: border-box;
+        }
+
+        .shop-header { color: var(--accent-blue); margin: 0 0 15px 0; font-size: 1rem; text-transform: uppercase; letter-spacing: 1px; }
+
+        .upgrade-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .upgrade-info p { margin: 0; font-size: 0.85rem; color: #94a3b8; }
+        .upgrade-info b { color: white; display: block; }
+
+        .btn-upgrade {
+            background: var(--accent-blue); color: #0f172a; border: none;
+            padding: 8px 12px; border-radius: 10px; font-weight: bold; 
+            cursor: pointer; min-width: 80px;
+        }
+        .btn-upgrade:disabled { background: #475569; color: #94a3b8; }
+
+        .modal {
+            display: none; position: fixed; 
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; color: #0f172a; 
+            padding: 30px; border-radius: 24px; 
+            z-index: 100; text-align: center;
+            width: 260px; box-shadow: 0 0 100px rgba(0,0,0,0.8);
+        }
+        .win-amount { color: var(--accent-green); font-weight: bold; font-size: 1.4rem; display: block; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-<div id="top-bar">
-    <div id="money-display">Cash: $100</div>
-    <button class="btn-main" onclick="toggleBuildMode()">Build Mode</button>
-</div>
+    <div class="header">
+        <div style="font-weight: bold; font-size: 1.4rem;">Scratch Inc.</div>
+        <div class="stats-badge">💰 <span id="coin-count">--</span></div>
+    </div>
 
-<canvas id="gameCanvas"></canvas>
+    <div class="card-container">
+        <div class="prize-grid" id="prize-grid">
+            <div class="prize-cell">?</div><div class="prize-cell">?</div>
+            <div class="prize-cell">?</div><div class="prize-cell">?</div>
+        </div>
+        <canvas id="scratch-canvas" width="320" height="320"></canvas>
+        <canvas id="particle-canvas" width="320" height="320"></canvas>
+    </div>
 
-<div id="build-confirm">
-    <button style="background:var(--accent)" onclick="confirmPlacement()">Confirm</button>
-    <button style="background:var(--danger)" onclick="cancelPlacement()">Cancel</button>
-</div>
+    <button id="buy-btn" class="btn-primary" onclick="buyCard()">BUY CARD (2 💰)</button>
 
-<div id="bottom-bar">
-    <button class="btn-action" onclick="triggerAction()">ACTION</button>
-</div>
+    <div class="shop-container">
+        <h3 class="shop-header">Gear & Upgrades</h3>
+        <div class="upgrade-row">
+            <div class="upgrade-info"><b>Coin Size</b><p>Level <span id="size-lvl">1</span></p></div>
+            <button id="up-size" class="btn-upgrade" onclick="upgrade('size')">--</button>
+        </div>
+        <div class="upgrade-row" style="margin-bottom: 0;">
+            <div class="upgrade-info"><b>Scratch Power</b><p>Level <span id="str-lvl">1</span></p></div>
+            <button id="up-str" class="btn-upgrade" onclick="upgrade('strength')">--</button>
+        </div>
+    </div>
+
+    <div id="result-modal" class="modal">
+        <h2 id="modal-title">TITLE</h2>
+        <p id="modal-msg">MESSAGE</p>
+        <button class="btn-primary" style="width: 100%; margin-top: 20px;" onclick="closeModal()">COLLECT</button>
+    </div>
 
 <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
+    // --- State & Variables ---
+    let coins = parseInt(localStorage.getItem('scratcher_coins')) || 10;
+    let sizeLvl = parseInt(localStorage.getItem('size_lvl')) || 1;
+    let strLvl = parseInt(localStorage.getItem('str_lvl')) || 1;
     
-    // 1. GLOBAL VARIABLES (Using 'let' so resize works)
-    let TILE = 50; 
-    const COLS = 10, ROWS = 10;
-    let offX = 0, offY = 0;
+    const symbols = ['🍒', '💎', '🍋', '⭐', '🔔'];
+    const canvas = document.getElementById('scratch-canvas');
+    const ctx = canvas.getContext('2d');
+    const pCanvas = document.getElementById('particle-canvas');
+    const pCtx = pCanvas.getContext('2d');
+    
+    let isDrawing = false;
+    let lastX = 0, lastY = 0;
+    let cardActive = false;
+    let pendingWin = 0;
+    let particles = [];
 
-    let gameState = {
-        money: 100,
-        mode: 'PLAY',
-        movingObj: null,
-        isPlaced: false,
-        tempPos: { gX: 0, gY: 0 },
-        player: { x: 0, y: 0, tX: 0, tY: 0, holding: 0 },
-        // MOVED HIGHER: gridY is now 1 and 2 instead of 7/8
-        counter: { gridX: 4, gridY: 1, w: 2, h: 1, color: '#8d6e63' },
-        shelves: [{ id: 1, gridX: 2, gridY: 3, w: 2, h: 1, color: '#5d4037' }],
-        deliveries: []
-    };
+    // --- Setup ---
+    updateUI();
+    handleRecharge();
+    animateParticles();
 
-    function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight - 130;
+    function updateUI() {
+        document.getElementById('coin-count').innerText = coins;
+        document.getElementById('size-lvl').innerText = sizeLvl;
+        document.getElementById('str-lvl').innerText = strLvl;
         
-        // Dynamic tile size that fits the screen width
-        TILE = Math.floor(canvas.width / (COLS + 2));
-        
-        offX = (canvas.width - (COLS * TILE)) / 2;
-        // Keep the shop near the top so it's reachable
-        offY = 40; 
+        const sizeCost = sizeLvl * 50;
+        const strCost = strLvl * 75;
+        document.getElementById('up-size').innerText = `${sizeCost} 💰`;
+        document.getElementById('up-str').innerText = `${strCost} 💰`;
+        document.getElementById('up-size').disabled = coins < sizeCost;
+        document.getElementById('up-str').disabled = coins < strCost;
 
-        // Initial player placement
-        if (gameState.player.x === 0) {
-            gameState.player.x = offX + 5 * TILE;
-            gameState.player.y = offY + 8 * TILE;
-            gameState.player.tX = gameState.player.x;
-            gameState.player.tY = gameState.player.y;
+        localStorage.setItem('scratcher_coins', coins);
+        localStorage.setItem('size_lvl', sizeLvl);
+        localStorage.setItem('str_lvl', strLvl);
+    }
+
+    function upgrade(type) {
+        if (type === 'size') {
+            const cost = sizeLvl * 50;
+            if (coins >= cost) { coins -= cost; sizeLvl++; }
+        } else {
+            const cost = strLvl * 75;
+            if (coins >= cost) { coins -= cost; strLvl++; }
+        }
+        updateUI();
+    }
+
+    function handleRecharge() {
+        const now = Date.now();
+        const last = parseInt(localStorage.getItem('last_login_time')) || now;
+        const blocks = Math.floor(((now - last) / (1000 * 60 * 60)) / 4);
+        if (blocks > 0) {
+            const bonus = Math.min(blocks * 4, 12);
+            coins += bonus;
+            alert(`Claimed ${bonus} 💰 from time rewards!`);
+            localStorage.setItem('last_login_time', now.toString());
+            updateUI();
         }
     }
 
-    function toggleBuildMode() {
-        gameState.mode = (gameState.mode === 'PLAY') ? 'BUILD' : 'PLAY';
-        gameState.movingObj = null;
-        gameState.isPlaced = false;
-        document.getElementById('build-confirm').style.display = 'none';
-    }
-
-    function triggerAction() {
-        const p = gameState.player;
-        if (p.holding > 0) {
-            gameState.deliveries.push({ x: p.x, y: p.y, qty: p.holding });
-            p.holding = 0;
-        } else {
-            gameState.deliveries.forEach((d, i) => {
-                if (Math.hypot(p.x - d.x, p.y - d.y) < 60) {
-                    p.holding = 5;
-                    gameState.deliveries.splice(i, 1);
-                }
+    // --- Particle FX ---
+    function createParticles(x, y) {
+        for(let i=0; i < (2 * strLvl); i++) {
+            particles.push({
+                x: x + (Math.random()-0.5)*10, y: y + (Math.random()-0.5)*10,
+                vx: (Math.random() - 0.5) * 2, vy: Math.random() * 3,
+                life: 30, size: 1 + Math.random() * 2
             });
         }
     }
 
-    function confirmPlacement() {
-        if (gameState.movingObj) {
-            gameState.movingObj.gridX = gameState.tempPos.gX;
-            gameState.movingObj.gridY = gameState.tempPos.gY;
-        }
-        gameState.movingObj = null;
-        gameState.isPlaced = false;
-        document.getElementById('build-confirm').style.display = 'none';
+    function animateParticles() {
+        pCtx.clearRect(0, 0, 320, 320);
+        particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy; p.life--;
+            pCtx.fillStyle = `rgba(140, 140, 140, ${p.life/30})`;
+            pCtx.fillRect(p.x, p.y, p.size, p.size);
+            if(p.life <= 0) particles.splice(i, 1);
+        });
+        requestAnimationFrame(animateParticles);
     }
 
-    function cancelPlacement() {
-        gameState.movingObj = null;
-        gameState.isPlaced = false;
-        document.getElementById('build-confirm').style.display = 'none';
-    }
-
-    function update() {
-        const p = gameState.player;
-        p.x += (p.tX - p.x) * 0.15;
-        p.y += (p.tY - p.y) * 0.15;
-    }
-
-    function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // --- Scratch Logic ---
+    function buyCard() {
+        if (coins < 2) return alert("Not enough coins!");
+        coins -= 2;
+        updateUI();
         
-        // Define shopWidth inside draw to prevent reference errors
-        const shopWidth = COLS * TILE;
-
-        // Shop Floor
-        ctx.fillStyle = "#222";
-        ctx.fillRect(offX, offY, shopWidth, ROWS * TILE);
-
-        // Grid
-        ctx.strokeStyle = "#333";
-        for(let i=0; i<=COLS; i++) {
-            ctx.beginPath(); ctx.moveTo(offX + i*TILE, offY); ctx.lineTo(offX + i*TILE, offY + ROWS*TILE); ctx.stroke();
-        }
-        for(let j=0; j<=ROWS; j++) {
-            ctx.beginPath(); ctx.moveTo(offX, offY + j*TILE); ctx.lineTo(offX + shopWidth, offY + j*TILE); ctx.stroke();
+        canvas.style.transition = "none";
+        canvas.style.opacity = "1";
+        
+        // Foil Texture
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#cbd5e1'; 
+        ctx.fillRect(0, 0, 320, 320);
+        ctx.fillStyle = '#94a3b8'; 
+        for(let i=0; i<800; i++) {
+            ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
         }
 
-        // Furniture
-        const c = gameState.counter;
-        ctx.fillStyle = c.color;
-        ctx.fillRect(offX + c.gridX * TILE, offY + c.gridY * TILE, c.w * TILE, c.h * TILE);
-
-        gameState.shelves.forEach(s => {
-            ctx.fillStyle = s.color;
-            ctx.fillRect(offX + s.gridX * TILE, offY + s.gridY * TILE, s.w * TILE, s.h * TILE);
+        const res = [];
+        document.querySelectorAll('.prize-cell').forEach(c => {
+            const s = symbols[Math.floor(Math.random() * symbols.length)];
+            c.innerText = s; res.push(s);
         });
 
-        // Deliveries
-        ctx.fillStyle = "#fb8c00";
-        gameState.deliveries.forEach(d => {
-            ctx.fillRect(d.x - 10, d.y - 10, 20, 20);
-        });
-
-        // Player
-        ctx.fillStyle = "#2196F3";
-        ctx.beginPath(); ctx.arc(gameState.player.x, gameState.player.y, 15, 0, Math.PI*2); ctx.fill();
-
-        document.getElementById('money-display').innerText = `Cash: $${gameState.money}`;
+        const counts = {};
+        res.forEach(s => counts[s] = (counts[s] || 0) + 1);
+        const maxMatch = Math.max(...Object.values(counts));
+        pendingWin = maxMatch >= 3 ? 20 : (maxMatch === 2 ? 5 : 0);
+        
+        if (pendingWin > 0) {
+            document.getElementById('modal-title').innerText = "WINNER!";
+            document.getElementById('modal-msg').innerHTML = `Found ${maxMatch} matches!<br><span class="win-amount">+${pendingWin} 💰</span>`;
+        } else {
+            document.getElementById('modal-title').innerText = "TRY AGAIN";
+            document.getElementById('modal-msg').innerText = "Better luck on the next one!";
+        }
+        
+        cardActive = true;
+        document.getElementById('buy-btn').disabled = true;
     }
 
-    function handleInput(clientX, clientY) {
+    function scratch(e) {
+        if (!isDrawing || !cardActive) return;
         const rect = canvas.getBoundingClientRect();
-        const mx = clientX - rect.left;
-        const my = clientY - rect.top;
-        
-        const gX = Math.floor((mx - offX) / TILE);
-        const gY = Math.floor((my - offY) / TILE);
+        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
 
-        if (gameState.mode === 'BUILD') {
-            if (!gameState.movingObj) {
-                // Check Counter selection
-                if (gX >= gameState.counter.gridX && gX < gameState.counter.gridX + gameState.counter.w &&
-                    gY >= gameState.counter.gridY && gY < gameState.counter.gridY + gameState.counter.h) {
-                    gameState.movingObj = gameState.counter;
-                    return; // Stop here!
-                }
-                // Check Shelves selection
-                for (let s of gameState.shelves) {
-                    if (gX >= s.gridX && gX < s.gridX + s.w && gY >= s.gridY && gY < s.gridY + s.h) {
-                        gameState.movingObj = s;
-                        return; // Stop here!
-                    }
-                }
-            } else if (!gameState.isPlaced) {
-                gameState.tempPos = { gX, gY };
-                gameState.isPlaced = true;
-                const ui = document.getElementById('build-confirm');
-                ui.style.display = 'flex';
-                ui.style.left = clientX + 'px';
-                ui.style.top = (clientY - 60) + 'px';
-                return;
-            }
+        ctx.globalCompositeOperation = 'destination-out';
+        const baseRadius = 10 + (sizeLvl * 2);
+        const bristles = 5 + strLvl;
+
+        // Smooth Interpolation
+        ctx.lineWidth = baseRadius;
+        ctx.lineJoin = "round"; ctx.lineCap = "round";
+
+        for(let i=0; i < bristles; i++) {
+            const offsetX = (Math.random() - 0.5) * baseRadius;
+            const offsetY = (Math.random() - 0.5) * baseRadius;
+            ctx.beginPath();
+            ctx.moveTo(lastX + offsetX, lastY + offsetY);
+            ctx.lineTo(x + offsetX, y + offsetY);
+            ctx.stroke();
         }
+
+        lastX = x; lastY = y;
+        createParticles(x, y);
+        if (Math.random() > 0.98) checkReveal();
+    }
+
+    function checkReveal() {
+        const data = ctx.getImageData(0,0,320,320).data;
+        let trans = 0;
+        for(let i=3; i<data.length; i+=4) if(data[i] === 0) trans++;
         
-        gameState.player.tX = mx;
-        gameState.player.tY = my;
+        const threshold = 0.60 - (strLvl * 0.01); 
+        if ((trans / (320*320)) > threshold) {
+            cardActive = false;
+            canvas.style.transition = "opacity 1.2s";
+            canvas.style.opacity = "0";
+            setTimeout(() => {
+                coins += pendingWin;
+                updateUI();
+                document.getElementById('result-modal').style.display = 'block';
+            }, 1200);
+        }
     }
 
-    canvas.addEventListener('mousedown', (e) => {
-        if (e.button === 0) handleInput(e.clientX, e.clientY);
-        if (e.button === 2) triggerAction();
-    });
-
-    canvas.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        handleInput(e.touches[0].clientX, e.touches[0].clientY);
-    }, {passive: false});
-
-    window.addEventListener('resize', resize);
-    window.oncontextmenu = (e) => e.preventDefault();
-
-    function loop() {
-        update();
-        draw();
-        requestAnimationFrame(loop);
+    function closeModal() {
+        document.getElementById('result-modal').style.display = 'none';
+        document.getElementById('buy-btn').disabled = false;
+        
+        // Reset symbols to ? between rounds
+        document.querySelectorAll('.prize-cell').forEach(c => c.innerText = "?");
+        
+        ctx.clearRect(0,0,320,320);
+        localStorage.setItem('last_login_time', Date.now().toString());
     }
 
-    resize();
-    loop();
+    function startDrawing(e) {
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        lastX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+        lastY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+        scratch(e);
+    }
+
+    canvas.addEventListener('mousedown', startDrawing);
+    window.addEventListener('mouseup', () => isDrawing = false);
+    canvas.addEventListener('mousemove', scratch);
+    canvas.addEventListener('touchstart', (e) => { startDrawing(e); }, {passive: false});
+    canvas.addEventListener('touchend', () => isDrawing = false);
+    canvas.addEventListener('touchmove', (e) => { scratch(e); }, {passive: false});
 </script>
 </body>
 </html>
