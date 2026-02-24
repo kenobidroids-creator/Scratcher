@@ -11,17 +11,13 @@
             font-family: 'Segoe UI', sans-serif; touch-action: none; 
             display: flex; flex-direction: column; height: 100dvh; 
         }
-        #gameCanvas { flex: 1; display: block; background: #1a1a1a; }
-        
-        #top-bar { height: 50px; background: rgba(0,0,0,0.9); display: flex; justify-content: space-around; align-items: center; color: white; border-bottom: 2px solid #444; z-index: 10; }
-        #bottom-bar { height: 80px; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; gap: 15px; padding-bottom: env(safe-area-inset-bottom); z-index: 10; }
-        
+        canvas { flex: 1; display: block; background: #1a1a1a; cursor: crosshair; }
+        #top-bar { height: 50px; background: #000; display: flex; justify-content: space-around; align-items: center; color: white; border-bottom: 2px solid #333; z-index: 10; }
+        #bottom-bar { height: 80px; background: #000; display: flex; justify-content: center; align-items: center; padding-bottom: env(safe-area-inset-bottom); z-index: 10; }
         #build-confirm { display: none; position: absolute; gap: 10px; z-index: 100; }
-        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; transition: transform 0.1s; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; }
         .btn-main { background: var(--primary); }
-        .btn-action { background: var(--accent); padding: 15px 30px; font-size: 18px; }
-        .btn-confirm { background: var(--accent); }
-        .btn-cancel { background: var(--danger); }
+        .btn-action { background: var(--accent); padding: 15px 40px; font-size: 1.2rem; }
     </style>
 </head>
 <body>
@@ -34,8 +30,8 @@
 <canvas id="gameCanvas"></canvas>
 
 <div id="build-confirm">
-    <button class="btn-confirm" onclick="confirmPlacement()">Confirm</button>
-    <button class="btn-cancel" onclick="cancelPlacement()">Cancel</button>
+    <button style="background:var(--accent)" onclick="confirmPlacement()">Confirm</button>
+    <button style="background:var(--danger)" onclick="cancelPlacement()">Cancel</button>
 </div>
 
 <div id="bottom-bar">
@@ -46,9 +42,9 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    // Grid Settings
-    let TILE = 60; // Larger tiles feel better for mobile camera
-    const COLS = 12, ROWS = 20; // Taller room to demonstrate the scroll
+    // Grid & Camera Config
+    let TILE = 60; 
+    const COLS = 12, ROWS = 20; // 20 Rows ensures we have to scroll down
     const camera = { x: 0, y: 0 };
 
     let gameState = {
@@ -59,16 +55,13 @@
         tempPos: { gX: 0, gY: 0 },
         player: { x: 300, y: 300, tX: 300, tY: 300, holding: 0 },
         counter: { gridX: 5, gridY: 2, w: 1, h: 3, color: '#8d6e63' },
-        shelves: [
-            { id: 1, gridX: 2, gridY: 5, w: 2, h: 1, color: '#5d4037' }
-        ],
+        shelves: [{ id: 1, gridX: 3, gridY: 8, w: 2, h: 1, color: '#5d4037' }],
         deliveries: []
     };
 
     function resize() {
         canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight - 130; // Accounting for bars
-        // Adjust TILE based on width for mobile responsiveness
+        canvas.height = window.innerHeight - 130;
         TILE = window.innerWidth < 600 ? Math.floor(window.innerWidth / 8) : 60;
     }
 
@@ -112,18 +105,17 @@
 
     function update() {
         const p = gameState.player;
-        // Smooth movement
         p.x += (p.tX - p.x) * 0.12;
         p.y += (p.tY - p.y) * 0.12;
 
-        // CAMERA FOLLOW WITH BOUNDARIES
+        // CAMERA CLAMPING (Reveals bottom part of the room)
         let targetX = p.x - canvas.width / 2;
         let targetY = p.y - canvas.height / 2;
 
         const worldW = COLS * TILE;
         const worldH = ROWS * TILE;
 
-        // Clamp camera so it doesn't show the black void
+        // Stop camera from showing outside the shop boundaries
         camera.x = Math.max(0, Math.min(targetX, worldW - canvas.width));
         camera.y = Math.max(0, Math.min(targetY, worldH - canvas.height));
     }
@@ -134,13 +126,12 @@
         ctx.save();
         ctx.translate(-camera.x, -camera.y);
 
-        // Shop Floor
+        // Shop Floor (Starts at 0,0 World Space)
         ctx.fillStyle = "#222";
         ctx.fillRect(0, 0, COLS * TILE, ROWS * TILE);
 
-        // Grid
+        // Grid Lines
         ctx.strokeStyle = "#333";
-        ctx.lineWidth = 1;
         for(let i=0; i<=COLS; i++) {
             ctx.beginPath(); ctx.moveTo(i*TILE, 0); ctx.lineTo(i*TILE, ROWS*TILE); ctx.stroke();
         }
@@ -159,18 +150,9 @@
             ctx.fillRect(s.gridX * TILE, s.gridY * TILE, s.w * TILE, s.h * TILE);
         });
 
-        // Deliveries
-        ctx.fillStyle = "#fb8c00";
-        gameState.deliveries.forEach(d => {
-            ctx.fillRect(d.x - 15, d.y - 15, 30, 30);
-        });
-
         // Player
         ctx.fillStyle = "#2196F3";
         ctx.beginPath(); ctx.arc(gameState.player.x, gameState.player.y, 20, 0, Math.PI*2); ctx.fill();
-        if(gameState.player.holding > 0) {
-            ctx.fillStyle = "#fb8c00"; ctx.fillRect(gameState.player.x - 10, gameState.player.y - 45, 20, 20);
-        }
 
         ctx.restore();
         
@@ -180,7 +162,7 @@
     function handleInput(clientX, clientY) {
         const rect = canvas.getBoundingClientRect();
         
-        // CONVERT SCREEN CLICK TO WORLD POSITION
+        // CONVERT SCREEN CLICK TO WORLD SPACE
         const worldX = (clientX - rect.left) + camera.x;
         const worldY = (clientY - rect.top) + camera.y;
         
@@ -189,13 +171,12 @@
 
         if (gameState.mode === 'BUILD') {
             if (!gameState.movingObj) {
-                // Check Counter
+                // Selection logic must happen in World Space
                 if (gX >= gameState.counter.gridX && gX < gameState.counter.gridX + gameState.counter.w &&
                     gY >= gameState.counter.gridY && gY < gameState.counter.gridY + gameState.counter.h) {
                     gameState.movingObj = gameState.counter;
                     return;
                 }
-                // Check Shelves
                 for (let s of gameState.shelves) {
                     if (gX >= s.gridX && gX < s.gridX + s.w && gY >= s.gridY && gY < s.gridY + s.h) {
                         gameState.movingObj = s;
@@ -239,6 +220,5 @@
     resize();
     loop();
 </script>
-
 </body>
 </html>
