@@ -160,7 +160,7 @@
         <div id="boss-icon" style="font-size: 4rem; margin: 10px 0;">🕵️‍♂️</div>
         <h3 id="mod-name" style="margin-bottom: 5px;"></h3>
         <p id="mod-desc" style="opacity: 0.8; margin-bottom: 20px;"></p>
-        <button class="buy-btn" onclick="closeBossModal()" style="width: 100%;">I'll pay...</button>
+        <button class="buy-btn" onclick="closeBossModal()" style="width: 100%;">Fine...</button>
     </div>
 </div>
 
@@ -237,13 +237,18 @@
         //const cardText = document.getElementById('cards-count');
         //if (cardText) cardText.innerText = `${cardsPlayed}/5`;
 
-        // Populate symbol value in UI above Token Bar
-        const levelBar = document.getElementById('symbol-levels');
-        if (levelBar) {
-            levelBar.innerHTML = Object.entries(symbolData)
-                .map(([sym, data]) => `<span>${sym} <b style="color:var(--accent-blue)">Lvl ${data.lvl}</b></span>`)
-                .join(' | ');
-        }
+        // Populate symbol value and levels in UI
+    const levelBar = document.getElementById('symbol-levels');
+    if (levelBar) {
+        levelBar.innerHTML = Object.entries(symbolData)
+            .map(([sym, data]) => {
+                return `<span>
+                    ${sym} <b style="color:var(--accent-blue)">Lvl ${data.lvl}</b> 
+                    <small style="opacity:0.7">(${data.val}💰)</small>
+                </span>`;
+            })
+            .join(' | ');
+    }
 
         // --- GATE TICKET TABS ---
     const tabs = document.querySelectorAll('.ticket-tab');
@@ -411,18 +416,19 @@ if (window.hasAutoReveal) {
 
 function calculateWin(res) {
     const t = TICKET_TYPES[currentType];
-    let base = 0;
-    let matchType = "No Match";
+    let potentialWins = []; // The "basket" to collect all detected patterns
+    let pairSuperseded = false;
+    base = 0;
+    matchType = "No Match";
+    winningIndices = []; 
     let winningSymbol = res[0]; 
-    
     isJackpot = false;
-    winningIndices = [];
     winColor = "var(--accent-green)";
 
     const gridWidth = t.cols;
     const lines = [];
 
-    // --- 1. GENERATE LINES (Rows, Cols, Diagonals) ---
+    // --- 1. GENERATE LINES ---
     for (let r = 0; r < t.rows; r++) {
         let row = []; for (let c = 0; c < t.cols; c++) row.push(r * gridWidth + c);
         lines.push(row);
@@ -431,7 +437,6 @@ function calculateWin(res) {
         let col = []; for (let r = 0; r < t.rows; r++) col.push(r * gridWidth + c);
         lines.push(col);
     }
-    // Always calculate diagonals
     let d1 = [], d2 = [];
     for (let i = 0; i < t.cols; i++) {
         d1.push(i * gridWidth + i);
@@ -439,139 +444,116 @@ function calculateWin(res) {
     }
     lines.push(d1, d2);
 
-    // --- 2. PATTERN CHECKING ---
-    let bestPatternMatch = 0;
-
-    // Check Jackpot & Match 3 (Pattern logic)
+    // --- 2. JACKPOT DETECTION ---
     for (let line of lines) {
         const symbolsInLine = line.map(idx => res[idx]);
-        const firstS = symbolsInLine[0];
-        
-        if (symbolsInLine.every(s => s === firstS)) {
-            let req = (currentType === 'mini') ? 4 : (currentType === 'mega' ? 3 : 4);
-            if (symbolsInLine.length === req || (currentType === 'mini' && res.every(s => s === res[0]))) {
-                isJackpot = true;
-                winningIndices = (currentType === 'mini') ? [0,1,2,3] : line;
-                winningSymbol = firstS;
-                // NEW: Base win + (Symbol Value * 5 for Jackpot)
-                base = t.win3 + (symbolData[winningSymbol].val * 5);
-                matchType = "JACKPOT!";
-                winColor = "var(--text-gold)";
-                break;
-            }
-        }
+        const firstSymbol = res[0];
+    if (res.every(s => s === firstSymbol)) {
+        let jackpotVal = t.win3 + (symbolData[firstSymbol].val * res.length);
+        potentialWins.push({ 
+            type: 'JACKPOT!', 
+            val: jackpotVal, 
+            idx: res.map((_, i) => i), // Highlight the WHOLE board
+            symbol: firstSymbol 
+        });
+    }
     }
 
-    // --- 3. L-SHAPE LOGIC (Now includes MINI) ---
-    if (!isJackpot && bestPatternMatch < 3) {
-        // We scan every 2x2 area of the grid for a "corner"
-        for (let r = 0; r < t.rows - 1; r++) {
-            for (let c = 0; c < t.cols - 1; c++) {
-                const i = r * gridWidth + c;
-                const right = i + 1;
-                const down = i + gridWidth;
-                const corner = i + gridWidth + 1;
-
-                // Check 4 possible rotations of the L-shape corner
-                const shapes = [
-                    [i, right, down],   // ┌
-                    [i, right, corner], // ┐
-                    [i, down, corner],  // └
-                    [right, down, corner] // ┘
-                ];
-                // L-SHAPE LOOP
-                for (let shape of shapes) {
-    if (res[shape[0]] === res[shape[1]] && res[shape[0]] === res[shape[2]]) {
-    bestPatternMatch = 3;
-    winningIndices = shape;
-    winningSymbol = res[shape[0]];
-    base = t.win3 || 10; // Use the ticket's win3 value
-    matchType = "L-SHAPE!";
-    break;
-}
-}
-                if (bestPatternMatch === 3) break;
-            }
-            if (bestPatternMatch === 3) break;
-        }
-    }
-
-    // --- 4. PAIR LOGIC ---
-    if (!isJackpot && bestPatternMatch < 3) {
-        if (activeBossMod?.id === 'no_pairs') {
-            matchType = "Standardization (No Pairs)";
-        } else {
-            for (let line of lines) {
-                const lineSyms = line.map(idx => res[idx]);
-                if (lineSyms[0] === lineSyms[1]) {
-                    winningSymbol = lineSyms[0];
-                    winningIndices = [line[0], line[1]];
-                    base = t.win2;
-                    matchType = `Pair of ${winningSymbol}`;
-                    bestPatternMatch = 2;
-                    break;
+    // --- 3. L-SHAPE DETECTION ---
+    for (let r = 0; r < t.rows - 1; r++) {
+        for (let c = 0; c < t.cols - 1; c++) {
+            const i = r * gridWidth + c;
+            const right = i + 1, down = i + gridWidth, corner = i + gridWidth + 1;
+            const shapes = [[i, right, down], [i, right, corner], [i, down, corner], [right, down, corner]];
+            for (let shape of shapes) {
+                if (res[shape[0]] === res[shape[1]] && res[shape[0]] === res[shape[2]]) {
+                    let sym = res[shape[0]];
+                    let val = (t.win3 || 10) + (symbolData[sym].val * 3);
+                    potentialWins.push({ type: 'L-SHAPE!', val: val, idx: shape, symbol: sym });
                 }
             }
         }
     }
 
-    // Use the new symbolData structure
-    let symBonus = symbolData[winningSymbol] ? symbolData[winningSymbol].val : 0;
-    let symLvl = symbolData[winningSymbol] ? symbolData[winningSymbol].lvl : 1;
+    // --- 4. PAIR DETECTION (Checks Boss Mod) ---
+    if (activeBossMod?.id !== 'no_pairs') {
+        let pairsFound = []; 
+        for (let line of lines) {
+            const s = line.map(idx => res[idx]);
+            let found = null;
+            if (s[0] === s[1]) found = { sym: s[0], indices: [line[0], line[1]] };
+            else if (s.length >= 3 && s[1] === s[2]) found = { sym: s[1], indices: [line[1], line[2]] };
+            else if (s.length === 4 && s[2] === s[3]) found = { sym: s[2], indices: [line[2], line[3]] };
 
-    // Multiplier calculation
-    let mult = multipliers[winningSymbol] || 1;
-    // finalWin calculation: base already includes the symbol value from the steps above
-    let finalWin = Math.floor((base + symBonus) * mult);
+            if (found && !pairsFound.some(p => p.sym === found.sym)) {
+                pairsFound.push(found);
+            }
+            if (pairsFound.length >= 2) break;
+        }
 
-    // Track bonuses for the breakdown display
-    let flatBonus = 0;
-    let diceTriggered = false;
-
-    // 1. Apply Golden Coin (+5 flat win)
-    if (tokens.some(t => t.id === 't1')) {
-        flatBonus += 5;
-    }
-
-    // 2. Apply Lucky Dice (1 in 4 chance to double)
-    if (tokens.some(t => t.id === 't2')) {
-        if (Math.random() < 0.25) {
-            diceTriggered = true;
+        if (pairsFound.length === 2) {
+            let p1 = pairsFound[0], p2 = pairsFound[1];
+            let val = (t.pair2 || 15) + (symbolData[p1.sym].val * 2) + (symbolData[p2.sym].val * 2);
+            potentialWins.push({ type: 'Two Pair', val: val, idx: p1.indices.concat(p2.indices), symbol: p1.sym });
+        } else if (pairsFound.length === 1) {
+            let p1 = pairsFound[0];
+            let val = t.win2 + (symbolData[p1.sym].val * 2);
+            potentialWins.push({ type: 'Pair', val: val, idx: p1.indices, symbol: p1.sym });
         }
     }
 
+    // --- 5. RESOLVE BEST WIN (Links to Draw Function) ---
+    if (potentialWins.length > 0) {
+        potentialWins.sort((a, b) => b.val - a.val);
+        let best = potentialWins[0];
+        
+        base = best.val;
+        matchType = best.type;
+        winningIndices = best.idx; // Now correctly updates global variable
+        winningSymbol = best.symbol;
+        
+        isJackpot = (matchType === "JACKPOT!");
+        winColor = isJackpot ? "var(--text-gold)" : "var(--accent-green)";
+        
+        if (potentialWins.length > 1) pairSuperseded = true;
+    } else {
+        winningIndices = []; // Clear for no-win cards
+    }
 
-// Calculate final total
-   // FINAL CALCULATIONS
+    // --- 6. APPLY MULTIPLIERS & TOKENS ---
+    let mult = multipliers[winningSymbol] || 1;
+    let finalWin = Math.floor(base * mult);
+    let flatBonus = 0;
+    let diceTriggered = false;
+
+    tokens.forEach((tk, index) => {
+        if (index !== frozenSlotIndex) {
+            if (tk.id === 't1') flatBonus += 5; // Golden Coin
+            if (tk.id === 't2' && Math.random() < 0.25) diceTriggered = true; // Lucky Dice
+        }
+    });
+
     if (diceTriggered) finalWin *= 2;
-    
-    // Apply Token Bonuses (Example: Golden Coin)
-    if (tokens.some(tk => tk.id === 't1')) flatBonus += 5;
-
     pendingWin = finalWin + flatBonus;
 
-    // UPDATE MODAL BREAKDOWN
-    // We explicitly use .val and .lvl to avoid [object Object] errors
-    document.getElementById('modal-title').innerText = pendingWin > 0 ? "WINNER!" : "TRY AGAIN";
+    // --- 7. UPDATE MODAL DISPLAY ---
+    let ticketPrize = (matchType === 'Two Pair' || matchType === 'L-SHAPE!') ? (t.pair2 || 15) : (isJackpot ? t.win3 : t.win2);
+    if (matchType === "No Match") ticketPrize = 0;
+    let totalSymBonus = (matchType !== "No Match") ? (base - ticketPrize) : 0;
+    let priorityNote = pairSuperseded ? `<div style="font-size: 0.7rem; color: var(--accent-blue); margin-top: -5px; margin-bottom: 5px;">ℹ️ Highest Pattern Payout Selected</div>` : "";
+
+    document.getElementById('modal-title').innerText = (matchType !== "No Match") ? "WINNER!" : "PITY PAYOUT";
     document.getElementById('modal-msg').innerHTML = `
-    <div style="text-align: left; font-size: 0.85rem; color: #334155;">
-        <div style="display:flex; justify-content:space-between;"><span>Result:</span> <b>${matchType}</b></div>
-        <div style="display:flex; justify-content:space-between;"><span>Ticket Base:</span> <b>+${base}💰</b></div>
-        <div style="display:flex; justify-content:space-between;"><span>${winningSymbol} Bonus (Lvl ${symLvl}):</span> <b style="color:var(--accent-blue)">+${symBonus}💰</b></div>
-        <div style="display:flex; justify-content:space-between;"><span>Multiplier:</span> <b>x${mult.toFixed(1)}</b></div>
-        ${flatBonus > 0 ? `<div style="display:flex; justify-content:space-between;"><span>Token Bonus:</span> <b>+${flatBonus}💰</b></div>` : ''}
-        <hr style="border: 0.5px solid #e2e8f0; margin: 8px 0;">
-        <div style="display:flex; justify-content:space-between; font-size: 1.1rem;"><b>Total:</b> <b style="color:var(--accent-green)">${pendingWin}💰</b></div>
-    </div>
-`;
-    tokens.forEach((tk, index) => {
-    // Only apply the token if it's NOT in the frozen slot
-    if (index !== frozenSlotIndex) {
-        if (tk.onWin) multiplier = tk.onWin(multiplier);
-        // Add your other token logic here (Golden Coin, Dice, etc.)
-        if (tk.id === 't1') finalWin += 5; 
-    }
-});
+        <div style="text-align: left; font-size: 0.85rem; color: #334155;">
+            <div style="display:flex; justify-content:space-between;"><span>Result:</span> <b>${matchType}</b> ${diceTriggered ? '<span class="multiplier-tag">DICE x2</span>' : ''}</div>
+            ${priorityNote}
+            <div style="display:flex; justify-content:space-between;"><span>Ticket Prize:</span> <b>+${ticketPrize}💰</b></div>
+            <div style="display:flex; justify-content:space-between;"><span>Celestial Bonus:</span> <b style="color:var(--accent-blue)">+${totalSymBonus}💰</b></div>
+            <div style="display:flex; justify-content:space-between;"><span>Multiplier:</span> <b>x${mult.toFixed(1)}</b></div>
+            <hr style="border: 0.5px solid #e2e8f0; margin: 8px 0;">
+            <div style="display:flex; justify-content:space-between; font-size: 1.1rem;"><b>Total:</b> <b style="color:var(--accent-green)">${pendingWin}💰</b></div>
+        </div>
+    `;
 }
 
     function checkReveal() {
@@ -606,8 +588,10 @@ function drawWinEffects(indices, color, isJackpot) {
     ctx.globalCompositeOperation = 'source-over';
     
     // Highlight winning symbols
+    // Only loop through the specific indices provided
     indices.forEach(idx => {
         const cell = cells[idx];
+        if (!cell) return;
         const rect = {
             x: cell.offsetLeft,
             y: cell.offsetTop,
@@ -682,7 +666,6 @@ function closeModal() {
 
     
     document.getElementById('result-modal').style.display = 'none';
-    document.getElementById('buy-btn').disabled = false;
     
     // Clear the board for the next card
     document.querySelectorAll('.prize-cell').forEach(c => c.innerText = "?");
@@ -690,19 +673,27 @@ function closeModal() {
 
     cardActive = false;
     currentSymbols = []; // Wipe the saved card
-    saveGame();
-    updateUI(); // Refresh the counter
     
     // Logic to open shop or refresh UI
-    if (cardsPlayed >= 5) openShop();
-    else updateUI();
+    if (cardsPlayed >= 5) {
+        document.getElementById('buy-btn').disabled = true;
+        // This opens the shop and WAITS for the player
+        openShop(); 
+    } else {
+        // This just lets them keep playing the same day
+        document.getElementById('buy-btn').disabled = false;
+        updateUI();
+    }
+    saveGame();
 }
 
 function openShop() {
+    // Force the modal to show first
+    document.getElementById('shop-modal').style.display = 'block';
+
     const rerollDisp = document.getElementById('reroll-display');
     if (rerollDisp) rerollDisp.innerText = rerollCost;
 
-    let rerollCost = 5;
 
     const rent = 5 + (day * 5 * ante);
 
@@ -724,8 +715,6 @@ function openShop() {
     document.getElementById('shop-rent-msg').innerHTML = `Paid <b>${effectiveRent}💰</b> Rent. Balance: <b>${Math.floor(coins)}💰</b>`;
     
    renderShopItems();
-
-    document.getElementById('shop-modal').style.display = 'block';
     updateUI();
 }
 
@@ -754,32 +743,37 @@ function openShop() {
 }
 
 function nextDay() {
-    rentPaidThisNight = false; // Reset for the next night
-    boughtItemsThisNight.clear(); // Refresh stock for next night
-    day++;
+    // 1. Close the shop first
+    document.getElementById('shop-modal').style.display = 'none';
+
+    // 2. Prepare for the new day
+    rentPaidThisNight = false; 
+    boughtItemsThisNight.clear(); 
+    day++; // Day actually increments here
     cardsPlayed = 0;
 
-    if (day === 5) {
-    activeBossMod = BOSS_MODS[Math.floor(Math.random() * BOSS_MODS.length)];
-    
-    // If Audit is chosen, pick a random slot 0-4
-    if (activeBossMod.id === 'frozen_slot') {
-        frozenSlotIndex = Math.floor(Math.random() * 5);
-    } else {
-        frozenSlotIndex = null;
+
+    // 3. BOSS CHECK - This happens AFTER the shop closes but BEFORE you can play cards
+    // Check for Boss encounter (Every 5 days)
+    if (day % 5 === 0) { 
+        activeBossMod = BOSS_MODS[Math.floor(Math.random() * BOSS_MODS.length)];
+        
+        if (activeBossMod.id === 'frozen_slot') {
+            frozenSlotIndex = Math.floor(Math.random() * 5);
+        } else {
+            frozenSlotIndex = null;
+        }
+
+        document.getElementById('mod-name').innerText = activeBossMod.name;
+        document.getElementById('mod-desc').innerText = activeBossMod.desc; 
+        document.getElementById('boss-modal').style.display = 'block';
     }
 
-    document.getElementById('mod-name').innerText = activeBossMod.name;
-    document.getElementById('mod-desc').innerText = (activeBossMod.id === 'frozen_slot') 
-        ? `Slot #${frozenSlotIndex + 1} is being audited. Tokens there are disabled!` 
-        : activeBossMod.desc;
+    // 4. Reset card state for the new day
+    cardActive = false;
+    currentSymbols = [];
     
-    document.getElementById('boss-modal').style.display = 'block';
-}
-
     saveGame();
-    document.getElementById('shop-modal').style.display = 'none';
-    document.getElementById('buy-btn').disabled = false;
     updateUI();
 }
 
@@ -805,12 +799,8 @@ function rerollShop() {
 }
 
 function renderShopItems() {
-    // Clear existing items so they don't stack up when rerolling
-    document.getElementById('gear-grid').innerHTML = '';
-    document.getElementById('token-grid').innerHTML = '';
-    document.getElementById('voucher-grid').innerHTML = '';
-
-     const container = document.getElementById('shop-items');
+    const container = document.getElementById('shop-items');
+    // We must reset the innerHTML to include the grid containers every time we render
     container.innerHTML = `
         <div class="shop-section">
             <div class="shop-section-title">GEAR & VIP</div>
@@ -821,7 +811,7 @@ function renderShopItems() {
             <div id="token-grid" class="shop-grid"></div>
         </div>
         <div class="shop-section">
-            <div class="shop-section-title">VOUCHERS</div>
+            <div class="shop-section-title">VOUCHERS & UPGRADES</div>
             <div id="voucher-grid" class="shop-grid"></div>
         </div>
     `;
@@ -831,11 +821,13 @@ function renderShopItems() {
     addShopItem("gear-grid", "Widen Coin", `Lvl ${sizeLvl+1}`, sizeLvl*40, "widen", () => sizeLvl++);
     addShopItem("gear-grid", "Scratch Power", `Lvl ${strLvl+1}`, strLvl*60, "power", () => strLvl++);
 
+    // 2. TOKENS (Available slots)
     const dailyTokens = TOKENS_DB.filter(t => !tokens.some(mt => mt.id === t.id)).slice(0, 2);
     dailyTokens.forEach(t => {
         addShopItem("token-grid", `${t.icon} ${t.name}`, t.desc, t.cost, t.id, () => tokens.push(t));
     });
 
+    // 3. AUTO REVEAL
     if (!window.hasAutoReveal) {
         addShopItem("voucher-grid", "⚡ Auto-Laser", "Unlocks Quick Reveal", 1000, "autolaser", () => window.hasAutoReveal = true);
     }
@@ -891,7 +883,8 @@ function saveGame() {
         cardActive,
         currentSymbols,
         currentType,
-        symbolData
+        symbolData,
+        activeBossMod
     };
     localStorage.setItem('scratch_inc_save', JSON.stringify(gameState));
     console.log("Game Saved:", gameState); // Helpful for debugging
@@ -914,7 +907,16 @@ function loadGame() {
         // Restore card state
         cardActive = data.cardActive || false;
         currentSymbols = data.currentSymbols || [];
+
+        if (data.activeBossMod) {
+            activeBossMod = data.activeBossMod;
+            // Re-apply the visual "Boss Active" warning if needed
+        }
+        
         currentType = data.currentType || 'mini';
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.type === currentType);
+        });
         // RESTORE SYMBOL DATA
         if (data.symbolData) {
             symbolData = data.symbolData;
@@ -922,6 +924,7 @@ function loadGame() {
         if (cardActive && currentSymbols.length > 0) {
             resumeActiveCard();
         }
+        updateUI();
     }
 }
 
