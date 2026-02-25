@@ -772,7 +772,7 @@ function nextDay() {
     // 4. Reset card state for the new day
     cardActive = false;
     currentSymbols = [];
-    
+    document.getElementById('buy-btn').disabled = false;
     saveGame();
     updateUI();
 }
