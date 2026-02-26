@@ -9,6 +9,7 @@
             --bg-deep: #0f172a; --bg-slate: #1e293b;
             --accent-blue: #38bdf8; --accent-green: #22c55e;
             --text-gold: #f1c40f; --card-white: #f8fafc;
+            --ultra-gold: #fbbf24;
             --rent-red: #ef4444; --joker-purple: #a855f7;
         }
 
@@ -27,10 +28,28 @@
         .ticket-menu { display: flex; gap: 8px; margin: 15px 0; width: 320px; }
         .ticket-tab { flex: 1; padding: 10px; border-radius: 12px; background: #334155; cursor: pointer; text-align: center; font-size: 0.7rem; font-weight: bold; }
         .ticket-tab.active { border-color: var(--accent-blue); background: #1e293b; color: var(--accent-blue); border: 2px solid; }
+        /* Locked state to make it look better on mobile */
+        .ticket-tab[style*="pointer-events: none"] {
+            background: #475569 !important; /* Slate grey */
+            color: #94a3b8 !important;
+            border: 1px dashed rgba(255,255,255,0.3);
+            filter: grayscale(1);
+        }
 
         .card-container { position: relative; width: 320px; height: 320px; background: var(--card-white); border-radius: 24px; overflow: hidden; border: 6px solid #334155; }
         .prize-grid { display: grid; width: 100%; height: 100%; position: absolute; }
-        .prize-cell { display: flex; align-items: center; justify-content: center; font-size: 2.5rem; border: 1px solid #e2e8f0; color: #334155; }
+        #scratch-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 5; /* The Scratch Layer is in the middle */
+        }
+        .prize-cell { display: flex; align-items: center; justify-content: center; font-size: 2.5rem; border: 1px solid #e2e8f0; color: #334155; z-index: 1; }
+        .prize-cell.preview-mode {
+            color: white;
+            z-index: 10; /* Forces the '?' to sit ON TOP of the canvas color */
+            pointer-events: none; /* Allows clicks to pass through to the Buy button if needed */
+        }
         canvas { position: absolute; top: 0; left: 0; z-index: 10; touch-action: none; }
 
         .day-tracker { width: 320px; margin: 10px 0; display: flex; justify-content: space-between; font-size: 0.8rem; color: #94a3b8; font-weight: bold; }
@@ -50,6 +69,35 @@
             margin-top: 10px; transition: all 0.2s;
         }
         .btn-reset:hover { border-color: var(--rent-red); color: var(--rent-red); }
+
+        /* Danger button (for Reset) */
+        .btn-danger {
+            background: #ef4444 !important;
+            box-shadow: 0 4px 0 #991b1b !important;
+            color: white; border: none; padding: 16px; width: 320px; border-radius: 16px; cursor: pointer; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 0 #15803d;
+        }
+        .btn-danger:active {
+            box-shadow: 0 2px 0 #991b1b !important;
+        }
+
+        /* Secondary button (for Cancel) */
+        .btn-secondary {
+            margin-top: 24px !important;
+            background: #64748b !important;
+            box-shadow: 0 4px 0 #334155 !important;
+        }
+        .btn-secondary:active {
+            box-shadow: 0 2px 0 #334155 !important;
+        }
+
+        /* Cancel reset button */
+        .cancel-reset-btn {
+            color: white; border: none; padding: 16px; border-radius: 16px; cursor: pointer; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 0 #15803d;
+        }
+        .cancel-reset-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #334155 !important;
+        }
 
         /* Ensure the token bar has visibility */
         .token-bar { 
@@ -102,6 +150,15 @@
         /* MODALS */
         .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; color: #0f172a; padding: 25px; border-radius: 24px; z-index: 100; text-align: center; width: 280px; box-shadow: 0 0 100px rgba(0,0,0,0.8); }
         .shop-modal { background: var(--bg-deep); color: white; width: 320px; border: 2px solid var(--accent-blue); }
+        #reset-modal {
+            display: none; position: fixed; 
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; color: #0f172a; 
+            padding: 25px; border-radius: 24px; 
+            z-index: 100; text-align: center;
+            width: 280px; /* This is the key to matching the size */
+            box-shadow: 0 0 100px rgba(0,0,0,0.8);
+        }
     </style>
 </head>
 <body>
@@ -109,7 +166,6 @@
     <div class="header">
         <div><b>ANTE <span id="ante-num">1</span></b></div>
         <div class="stats-badge">💰 <span id="coin-count">--</span></div>
-        <button class="btn-reset" onclick="resetRun()">RESET RUN</button>
     </div>
 
     <div id="symbol-levels" style="display: flex; gap: 10px; justify-content: center; margin-bottom: 5px; font-size: 0.7rem; color: #94a3b8;"></div>
@@ -120,6 +176,8 @@
         <div class="ticket-tab" onclick="selectTicket('mega', this)">MEGA (10)</div>
         <div class="ticket-tab" onclick="selectTicket('ultra', this)">ULTRA (50)</div>
     </div>
+
+    <div id="card-title-display" style="color: var(--accent-blue); font-weight: bold; margin-bottom: 5px; font-size: 0.9rem; letter-spacing: 1px;">MINI TICKET</div>
 
     <div class="card-container">
         <div class="prize-grid" id="prize-grid"></div>
@@ -137,6 +195,7 @@
     <button id="auto-reveal-btn" class="btn-primary" 
         style="display:none; background:var(--accent-blue); margin-top:10px;" 
         onclick="autoReveal()">QUICK REVEAL</button>
+    <button class="btn-reset" onclick="resetRun()">RESET RUN</button>
 
     <div id="shop-modal" class="modal shop-modal">
         <h3 style="color:var(--accent-blue); margin:0 0 10px 0;">NIGHT SHOP</h3>
@@ -152,6 +211,12 @@
         <h2 id="modal-title"></h2>
         <p id="modal-msg"></p>
         <button class="btn-primary" style="width: 100%;" onclick="closeModal()">COLLECT</button>
+    </div>
+
+    <div id="reset-modal" class="modal">
+        <h2 id="reset-modal-title"></h2>
+        <p id="reset-modal-msg"></p>
+        <button class="btn-danger" style="width: 100%;"></button>
     </div>
 
     <div id="boss-modal" class="modal">
@@ -253,24 +318,26 @@
         // --- GATE TICKET TABS ---
     const tabs = document.querySelectorAll('.ticket-tab');
     tabs.forEach(tab => {
-        // We can check the text or a data attribute. 
-        // Based on your HTML: MINI, MEGA, ULTRA
-        const label = tab.innerText.toUpperCase();
-        
-        if (label.includes('MEGA') && day < 3) {
-            tab.style.opacity = "0.4";
+        // 1. Get the original label (we'll store it in a data attribute)
+        if (!tab.dataset.label) tab.dataset.label = tab.innerText;
+            const originalLabel = tab.dataset.label.toUpperCase();
+
+        // 2. Logic to check day and update visible text
+        if (originalLabel.includes('MEGA') && day < 3) {
+            tab.style.opacity = "0.5";
             tab.style.pointerEvents = "none";
-            tab.title = "Unlocks on Day 3";
-        } else if (label.includes('ULTRA') && day < 6) {
-            tab.style.opacity = "0.4";
+            tab.innerText = "🔒 Day 3"; // Visible on Mobile & Desktop
+        } else if (originalLabel.includes('ULTRA') && day < 6) {
+            tab.style.opacity = "0.5";
             tab.style.pointerEvents = "none";
-            tab.title = "Unlocks on Day 6";
+            tab.innerText = "🔒 Day 6"; // Visible on Mobile & Desktop
         } else {
+            // 3. Unlock and restore original text
             tab.style.opacity = "1";
             tab.style.pointerEvents = "auto";
-            tab.title = "";
-        }
-    });
+            tab.innerText = tab.dataset.label;
+    }
+});
 
         const autoBtn = document.getElementById('auto-reveal-btn');
         if (window.hasAutoReveal) {
@@ -317,21 +384,57 @@ if (bar) {
         bar.appendChild(slot);
     }
 }
-    saveGame(); // Keep progress in sync
 }
 
     function selectTicket(type, el) {
         if (cardActive) return;
         currentType = type;
+        
+        // 1. DYNAMIC THEMING
+        const colors = {
+            mini:  { title: 'var(--accent-blue)',  scratch: '#cbd5e1' }, // Standard Grey
+            mega:  { title: 'var(--joker-purple)', scratch: '#94a3b8' }, // Darker Slate
+            ultra: { title: 'var(--ultra-gold)',   scratch: '#fbbf24' }  // Deep Bronze
+        };
+
+        // Update the dynamic title
+        const titleDisp = document.getElementById('card-title-display');
+        if (titleDisp) {
+        titleDisp.innerText = type.toUpperCase() + " TICKET";
+        titleDisp.style.color = colors[type].title;
+        }
+
+        // Update Tabs
         document.querySelectorAll('.ticket-tab').forEach(t => t.classList.remove('active'));
-        el.classList.add('active');
+        if (el) el.classList.add('active');
+
+        // Rebuild Grid Layout
         const t = TICKET_TYPES[type];
         const grid = document.getElementById('prize-grid');
         grid.style.gridTemplateColumns = `repeat(${t.cols}, 1fr)`;
         grid.innerHTML = '';
+        
+        // Fill with placeholders
         for(let i=0; i < t.cols*t.rows; i++) {
-            const c = document.createElement('div'); c.className = 'prize-cell'; c.innerText = '?'; grid.appendChild(c);
+            const c = document.createElement('div');
+            c.className = 'prize-cell preview-mode'; 
+            c.innerText = '?'; 
+            grid.appendChild(c);
         }
+
+        // 3. PREPARE CANVAS TEXTURE
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = colors[type].scratch; // Apply the unique card color
+        ctx.fillRect(0, 0, 320, 320);
+
+        // Add the "Noise" texture back
+        ctx.fillStyle = 'rgba(0,0,0,0.15)'; // Sublte dark specks
+        for(let i=0; i<800; i++) {
+            ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
+        }
+
+        // Ensure UI stays in sync
+        updateUI();
     }
 
     let hasAutoScratch = false; // Set to true when bought in shop
@@ -370,10 +473,30 @@ function autoReveal() {
 
     if (coins < t.cost) return alert("Broke!");
 
+    // REMOVE PREVIEW MODE
+    const cells = document.querySelectorAll('.prize-cell');
+    cells.forEach(cell => {
+        cell.classList.remove('preview-mode'); // Cell drops behind canvas
+        cell.innerText = ''; // Hide the '?' so it doesn't overlap the future prize
+    });
+
     // Draw scratch layer
+    // Instead of hardcoded, use the current theme
+    const themeColors = {
+        mini: '#cbd5e1',
+        mega: '#94a3b8',
+        ultra: '#fbbf24'
+    };
+
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#cbd5e1'; 
+    ctx.fillStyle = themeColors[currentType]; // Uses the unique color!
     ctx.fillRect(0, 0, 320, 320);
+
+    // Add the "Noise" texture back
+    ctx.fillStyle = 'rgba(0,0,0,0.15)'; // Sublte dark specks
+    for(let i=0; i<800; i++) {
+        ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
+    }
     
     // Deduct cost immediately
     coins -= t.cost;
@@ -576,7 +699,6 @@ function calculateWin(res) {
         }
 
         setTimeout(() => {
-            // REMOVE: coins += pendingWin;  <-- Delete this line
             document.getElementById('result-modal').style.display = 'block';
         }, 2000);
     }
@@ -645,8 +767,13 @@ function resumeActiveCard() {
     });
 
     // 3. Prepare Canvas
+    const themeColors = {
+        mini: '#cbd5e1',
+        mega: '#94a3b8',
+        ultra: '#fbbf24'
+    };
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#cbd5e1'; 
+    ctx.fillStyle = themeColors[currentType]; 
     ctx.fillRect(0, 0, 320, 320);
     
     // 4. Lock UI
@@ -655,6 +782,8 @@ function resumeActiveCard() {
 
     // 5. Re-run the win math so winningIndices are ready
     calculateWin(currentSymbols); 
+    cardActive = true; 
+    isDrawing = false;
 }
 
     // THIS IS WHERE THE MONEY IS ACTUALLY GIVEN
@@ -664,12 +793,30 @@ function closeModal() {
 
     cardsPlayed++;
 
+    const cancelBtn = document.getElementById('cancel-reset-btn');
+    if (cancelBtn) cancelBtn.remove(); // Safety cleanup
+
+    document.getElementById('reset-modal').style.display = 'none';
     
     document.getElementById('result-modal').style.display = 'none';
     
-    // Clear the board for the next card
-    document.querySelectorAll('.prize-cell').forEach(c => c.innerText = "?");
-    ctx.clearRect(0,0,320,320);
+    // RE-ENABLE PREVIEW: Prepare for the next potential card
+    document.querySelectorAll('.prize-cell').forEach(c => {
+        c.innerText = "?";
+        c.classList.add('preview-mode'); // Bring '?' back to the front
+    });
+
+    // Redraw the solid scratch color for the preview
+    const themeColors = { mini: '#cbd5e1', mega: '#94a3b8', ultra: '#fbbf24' };
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = themeColors[currentType]; 
+    ctx.fillRect(0, 0, 320, 320);
+
+    // Add the "Noise" texture back
+    ctx.fillStyle = 'rgba(0,0,0,0.15)'; // Sublte dark specks
+    for(let i=0; i<800; i++) {
+        ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
+    }
 
     cardActive = false;
     currentSymbols = []; // Wipe the saved card
@@ -849,6 +996,37 @@ function renderShopItems() {
 }
 
     // --- SYSTEMS ---
+
+// 1. The Particle Generator
+function createParticles(x, y, color) {
+    // strLvl makes more dust fall as you get stronger
+    for(let i=0; i < (2 * strLvl); i++) {
+        particles.push({
+            x: x + (Math.random()-0.5)*10, 
+            y: y + (Math.random()-0.5)*10,
+            vx: (Math.random() - 0.5) * 2, 
+            vy: Math.random() * 3, // Gravity effect
+            life: 30, 
+            size: 1 + Math.random() * 2,
+            color: color // Store the specific card color
+        });
+    }
+}
+
+// 2. The Animation Loop (Call this once at the start of your script)
+function animateParticles() {
+    pCtx.clearRect(0, 0, 320, 320);
+    particles.forEach((p, i) => {
+        p.x += p.vx; p.y += p.vy; p.life--;
+        // Use the particle's specific color with fading alpha
+        pCtx.fillStyle = p.color + Math.floor((p.life/30) * 255).toString(16).padStart(2, '0');
+        pCtx.fillRect(p.x, p.y, p.size, p.size);
+        if(p.life <= 0) particles.splice(i, 1);
+    });
+    requestAnimationFrame(animateParticles);
+}
+animateParticles();
+
     function scratch(e) {
         if (!isDrawing || !cardActive) return;
         const rect = canvas.getBoundingClientRect();
@@ -857,8 +1035,14 @@ function renderShopItems() {
         ctx.globalCompositeOperation = 'destination-out';
         ctx.lineWidth = 12 + sizeLvl*2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x,y); ctx.stroke();
         lastX = x; lastY = y;
+        
+        const themeColors = { mini: '#38bdf8', mega: '#a855f7', ultra: '#fbbf24' };
+        const currentColor = themeColors[currentType] || '#cbd5e1';
+        createParticles(x, y, currentColor); // Pass the matching color
+        
         if (Math.random()>0.9) checkReveal();
     }
+
     canvas.addEventListener('mousedown', e => { isDrawing=true; lastX=e.offsetX; lastY=e.offsetY; });
     window.addEventListener('mouseup', () => isDrawing=false);
     canvas.addEventListener('mousemove', scratch);
@@ -908,36 +1092,89 @@ function loadGame() {
         cardActive = data.cardActive || false;
         currentSymbols = data.currentSymbols || [];
 
-        if (data.activeBossMod) {
-            activeBossMod = data.activeBossMod;
-            // Re-apply the visual "Boss Active" warning if needed
-        }
-        
         currentType = data.currentType || 'mini';
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.type === currentType);
+        if (data.symbolData) symbolData = data.symbolData;
+
+        // 3. UI SYNC: Update the tabs and the grid layout
+        const tabs = document.querySelectorAll('.ticket-tab');
+        tabs.forEach(tab => {
+            const isMatch = tab.innerText.toLowerCase().includes(currentType);
+            tab.classList.toggle('active', isMatch);
+            
+            // Only rebuild the grid if there ISN'T an active card to resume
+            if (isMatch && !cardActive) {
+                selectTicket(currentType, tab);
+            }
         });
-        // RESTORE SYMBOL DATA
-        if (data.symbolData) {
-            symbolData = data.symbolData;
-        }
+
+        // 4. RESUME: If they left mid-scratch, put the symbols back
         if (cardActive && currentSymbols.length > 0) {
             resumeActiveCard();
+            // Manually set title if resuming
+            document.getElementById('card-title-display').innerText = currentType.toUpperCase() + " TICKET";
         }
         updateUI();
     }
 }
 
 function resetRun() {
-    if (confirm("Reset your entire run? All coins and upgrades will be lost.")) {
+    const modal = document.getElementById('reset-modal');
+    const title = document.getElementById('reset-modal-title');
+    const msg = document.getElementById('reset-modal-msg');
+    const actionBtn = modal.querySelector('.btn-danger');
+
+    // 1. Show the modal
+    modal.style.display = 'block';
+    
+    // 2. Set the Warning Content
+    title.innerText = "RESET RUN?";
+    title.style.color = "#ef4444"; // Red for danger
+    msg.innerHTML = "All coins and upgrades will be lost.<br>This cannot be undone!";
+    
+    
+    // 3. Setup the Confirm Reset Button
+    actionBtn.innerText = "YES, DELETE EVERYTHING";
+    actionBtn.style.background = "#ef4444";
+    actionBtn.style.boxShadow = "0 4px 0 #991b1b";
+    actionBtn.onclick = function() {
         localStorage.removeItem('scratch_inc_save');
         location.reload();
+    };
+
+    // 4. Create and Add the Cancel Button if it doesn't exist
+    let cancelBtn = document.getElementById('cancel-reset-btn');
+    if (!cancelBtn) {
+        cancelBtn = document.createElement('button');
+        cancelBtn.id = 'cancel-reset-btn';
+        cancelBtn.className = 'cancel-reset-btn';
+        modal.appendChild(cancelBtn);
     }
+    
+        cancelBtn.innerText = "No, take me back!";
+        cancelBtn.style.marginTop = "20px";
+        cancelBtn.style.background = "#64748b"; // Neutral slate color
+        cancelBtn.style.boxShadow = "0 4px 0 #334155";
+
+        cancelBtn.onclick = function() {
+            // Simply close the modal and cleanup
+            modal.style.display = 'none';
+            cancelBtn.remove();
+            // Reset the main button style for future use
+            actionBtn.style.background = ""; 
+            actionBtn.style.boxShadow = "";
+        };
 }
 
 // INIT
-    selectTicket('mini', document.querySelector('.ticket-tab'));
-    loadGame(); 
+    loadGame();
+    // Only select 'mini' if a card isn't already active from the load
+    // 2. If NO card was loaded/resumed, setup the default view
+    if (!cardActive) {
+    // Find the tab that matches our currentType (which might be from a save!)
+    const targetTab = Array.from(document.querySelectorAll('.ticket-tab'))
+                           .find(t => t.innerText.toLowerCase().includes(currentType));
+    selectTicket(currentType, targetTab);
+    } 
     updateUI();
     animate();
 
