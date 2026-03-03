@@ -3,1181 +3,181 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scratch Inc. - Ante 1</title>
-    <style>
-        :root {
-            --bg-deep: #0f172a; --bg-slate: #1e293b;
-            --accent-blue: #38bdf8; --accent-green: #22c55e;
-            --text-gold: #f1c40f; --card-white: #f8fafc;
-            --ultra-gold: #fbbf24;
-            --rent-red: #ef4444; --joker-purple: #a855f7;
-        }
-
-        body { 
-            font-family: 'Segoe UI', Roboto, sans-serif;
-            background: radial-gradient(circle at top, var(--bg-slate), var(--bg-deep));
-            color: white; margin: 0; padding: 20px 0;
-            display: flex; flex-direction: column; align-items: center; 
-            min-height: 100vh; touch-action: pan-y;
-        }
-
-        .header { width: 100%; max-width: 400px; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
-        .stats-badge { background: rgba(255,255,255,0.1); padding: 8px 16px; border-radius: 20px; color: var(--text-gold); font-weight: bold; }
-
-        /* TICKET SELECTOR */
-        .ticket-menu { display: flex; gap: 8px; margin: 15px 0; width: 320px; }
-        .ticket-tab { flex: 1; padding: 10px; border-radius: 12px; background: #334155; cursor: pointer; text-align: center; font-size: 0.7rem; font-weight: bold; }
-        .ticket-tab.active { border-color: var(--accent-blue); background: #1e293b; color: var(--accent-blue); border: 2px solid; }
-        /* Locked state to make it look better on mobile */
-        .ticket-tab[style*="pointer-events: none"] {
-            background: #475569 !important; /* Slate grey */
-            color: #94a3b8 !important;
-            border: 1px dashed rgba(255,255,255,0.3);
-            filter: grayscale(1);
-        }
-
-        .card-container { position: relative; width: 320px; height: 320px; background: var(--card-white); border-radius: 24px; overflow: hidden; border: 6px solid #334155; }
-        .prize-grid { display: grid; width: 100%; height: 100%; position: absolute; }
-        #scratch-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            z-index: 5; /* The Scratch Layer is in the middle */
-        }
-        .prize-cell { display: flex; align-items: center; justify-content: center; font-size: 2.5rem; border: 1px solid #e2e8f0; color: #334155; z-index: 1; }
-        .prize-cell.preview-mode {
-            color: white;
-            z-index: 10; /* Forces the '?' to sit ON TOP of the canvas color */
-            pointer-events: none; /* Allows clicks to pass through to the Buy button if needed */
-        }
-        canvas { position: absolute; top: 0; left: 0; z-index: 10; touch-action: none; }
-
-        .day-tracker { width: 320px; margin: 10px 0; display: flex; justify-content: space-between; font-size: 0.8rem; color: #94a3b8; font-weight: bold; }
-
-        .btn-primary { background: var(--accent-green); color: white; border: none; padding: 16px; width: 320px; border-radius: 16px; cursor: pointer; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 0 #15803d; }
-        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-        #auto-reveal-btn:disabled {
-        cursor: not-allowed;
-        opacity: 0.5;
-        filter: grayscale(1);
-        }
-
-        /* New Reset Button Style */
-        .btn-reset { 
-            background: transparent; color: #94a3b8; border: 1px solid #334155; 
-            padding: 8px 16px; border-radius: 12px; cursor: pointer; font-size: 0.7rem; 
-            margin-top: 10px; transition: all 0.2s;
-        }
-        .btn-reset:hover { border-color: var(--rent-red); color: var(--rent-red); }
-
-        /* Danger button (for Reset) */
-        .btn-danger {
-            background: #ef4444 !important;
-            box-shadow: 0 4px 0 #991b1b !important;
-            color: white; border: none; padding: 16px; width: 320px; border-radius: 16px; cursor: pointer; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 0 #15803d;
-        }
-        .btn-danger:active {
-            box-shadow: 0 2px 0 #991b1b !important;
-        }
-
-        /* Secondary button (for Cancel) */
-        .btn-secondary {
-            margin-top: 24px !important;
-            background: #64748b !important;
-            box-shadow: 0 4px 0 #334155 !important;
-        }
-        .btn-secondary:active {
-            box-shadow: 0 2px 0 #334155 !important;
-        }
-
-        /* Cancel reset button */
-        .cancel-reset-btn {
-            color: white; border: none; padding: 16px; border-radius: 16px; cursor: pointer; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 0 #15803d;
-        }
-        .cancel-reset-btn:active {
-            transform: translateY(2px);
-            box-shadow: 0 2px 0 #334155 !important;
-        }
-
-        /* Ensure the token bar has visibility */
-        .token-bar { 
-            display: flex; gap: 8px; justify-content: center; 
-            margin: 15px 0; min-height: 45px; 
-        }
-        .token-slot {
-             width: 40px; height: 40px;
-            background: var(--bg-slate);
-            border: 2px solid #334155;
-            border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.2rem; cursor: help;
-            position: relative; transition: all 0.2s;
-        }
-
-        /* Hover Tooltip */
-        .token-slot:hover::after {
-            content: attr(data-tip);
-            position: absolute; bottom: 50px; left: 50%;
-            transform: translateX(-50%);
-            background: #1e293b; border: 1px solid var(--accent-blue);
-            padding: 8px; border-radius: 6px; font-size: 0.75rem;
-            width: 140px; z-index: 100; color: white;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            line-height: 1.2; pointer-events: none;
-        }
-
-        /* SHOP LAYOUT CATEGORIES */
-        /* Item cards for shop */
-        .item-card { background: #1e293b; padding: 10px; border-radius: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #334155; }
-        .item-info { text-align: left; }
-        .item-info b { display: block; color: var(--accent-blue); font-size: 0.9rem; }
-        .item-info span { font-size: 0.65rem; color: #94a3b8; }
-        .btn-buy-item { background: var(--text-gold); border: none; padding: 8px; border-radius: 8px; font-weight: bold; cursor: pointer; min-width: 60px; }
-
-        .multiplier-tag { font-size: 0.6rem; background: var(--joker-purple); color: white; padding: 2px 6px; border-radius: 4px; margin-top: 5px; display: inline-block; }
-
-        .shop-section { margin-bottom: 20px; text-align: left; }
-        .shop-section-title { 
-        font-size: 0.8rem; color: var(--accent-blue); 
-        border-bottom: 1px solid #334155; margin-bottom: 10px; 
-        padding-bottom: 4px; letter-spacing: 1px;
-        }
-        .shop-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
-
-        /* Sold Out State */
-        .item-card.sold-out { opacity: 0.4; pointer-events: none; filter: grayscale(1); }
-
-        /* MODALS */
-        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; color: #0f172a; padding: 25px; border-radius: 24px; z-index: 100; text-align: center; width: 280px; box-shadow: 0 0 100px rgba(0,0,0,0.8); }
-        .shop-modal { background: var(--bg-deep); color: white; width: 320px; border: 2px solid var(--accent-blue); }
-        #reset-modal {
-            display: none; position: fixed; 
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: white; color: #0f172a; 
-            padding: 25px; border-radius: 24px; 
-            z-index: 100; text-align: center;
-            width: 280px; /* This is the key to matching the size */
-            box-shadow: 0 0 100px rgba(0,0,0,0.8);
-        }
-    </style>
+    <title>Scratch Inc.</title>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 
+<div class="modal-overlay" id="modal-overlay"></div>
+
+<!-- ═══ GAME SHELL ═══ -->
+<div class="game-shell">
+
+    <!-- Top bar: Ante + Coins -->
     <div class="header">
-        <div><b>ANTE <span id="ante-num">1</span></b></div>
-        <div class="stats-badge">💰 <span id="coin-count">--</span></div>
+        <div class="header-left">
+            <div class="header-ante" id="ante-label">Ante 1</div>
+            <div class="header-blind" id="blind-label">🟢 Small Blind</div>
+        </div>
+        <div class="coin-badge"><span class="coin-icon">💰</span><span id="coin-count">--</span></div>
     </div>
 
-    <div id="symbol-levels" style="display: flex; gap: 10px; justify-content: center; margin-bottom: 5px; font-size: 0.7rem; color: #94a3b8;"></div>
+    <!-- Blind Progress (THE core tension bar) -->
+    <div class="blind-progress-block">
+        <div class="blind-progress-header">
+            <span class="blind-progress-title">BLIND TARGET</span>
+            <span id="blind-progress-label" class="blind-progress-value">0 / 30💰</span>
+        </div>
+        <div class="blind-progress-track">
+            <div class="blind-progress-bar" id="blind-progress-bar"></div>
+        </div>
+    </div>
+
+    <!-- Boss banner -->
+    <div class="boss-banner" id="boss-banner"><span class="boss-banner-text"></span></div>
+
+    <!-- Symbol levels -->
+    <div class="symbol-levels" id="symbol-levels"></div>
+
+    <!-- Token bar -->
     <div class="token-bar" id="token-bar"></div>
 
-    <div class="ticket-menu" id="ticket-menu">
-        <div class="ticket-tab active" onclick="selectTicket('mini', this)">MINI (2)</div>
-        <div class="ticket-tab" onclick="selectTicket('mega', this)">MEGA (10)</div>
-        <div class="ticket-tab" onclick="selectTicket('ultra', this)">ULTRA (50)</div>
+    <!-- Ticket type tabs -->
+    <div class="ticket-menu">
+        <div class="ticket-tab active" data-type="mini"  data-display-text="MINI (3💰)"  onclick="selectTicket('mini', this)">MINI (3💰)</div>
+        <div class="ticket-tab"       data-type="mega"  data-display-text="MEGA (15💰)" onclick="selectTicket('mega', this)">MEGA (15💰)</div>
+        <div class="ticket-tab"       data-type="ultra" data-display-text="ULTRA (50💰)"onclick="selectTicket('ultra', this)">ULTRA (50💰)</div>
     </div>
 
-    <div id="card-title-display" style="color: var(--accent-blue); font-weight: bold; margin-bottom: 5px; font-size: 0.9rem; letter-spacing: 1px;">MINI TICKET</div>
+    <!-- Card title + crystal ball hint -->
+    <div class="card-meta-row">
+        <div class="card-title-display" id="card-title-display">MINI TICKET</div>
+        <div class="crystal-hint" id="crystal-hint"></div>
+    </div>
 
+    <!-- The scratch card -->
     <div class="card-container">
-        <div class="prize-grid" id="prize-grid"></div>
-        <canvas id="scratch-canvas" width="320" height="320"></canvas>
-        <canvas id="particle-canvas" width="320" height="320" style="pointer-events:none; z-index:20; position:absolute;"></canvas>
+        <div class="prize-grid"    id="prize-grid"></div>
+        <canvas id="scratch-canvas"  width="320" height="320"></canvas>
+        <canvas id="particle-canvas" width="320" height="320"></canvas>
     </div>
 
-    <div class="day-tracker">
-        <span>Day <span id="day-num">1</span>/10</span>
-        <span>Cards: <span id="cards-count">0</span>/5</span>
-        <span style="color:var(--rent-red)">Rent: <span id="rent-amount">5</span></span>
+    <!-- Cards remaining tracker -->
+    <div class="cards-tracker">
+        <span class="cards-tracker-label">Cards left:</span>
+        <div class="cards-pips" id="cards-pips-container"></div>
+        <span id="cards-remaining" style="font-family:var(--font-mono);color:var(--text-secondary)">3</span>
+        <span style="opacity:0.4">/</span>
+        <span id="cards-max" style="font-family:var(--font-mono);opacity:0.5">3</span>
+    </div>
+    <div class="cards-progress-wrap">
+        <div class="cards-progress-bar" id="cards-progress-bar"></div>
     </div>
 
-    <button id="buy-btn" class="btn-primary" onclick="buyCard()">BUY CARD</button>
-    <button id="auto-reveal-btn" class="btn-primary" 
-        style="display:none; background:var(--accent-blue); margin-top:10px;" 
-        onclick="autoReveal()">QUICK REVEAL</button>
+    <!-- Action buttons -->
+    <button id="buy-btn" class="btn-primary btn-buy" onclick="buyCard()">
+        BUY CARD (<span id="buy-cost">3</span>💰)
+    </button>
+    <button id="auto-reveal-btn" class="btn-primary btn-auto-reveal" onclick="autoReveal()">
+        ⚡ QUICK REVEAL
+    </button>
     <button class="btn-reset" onclick="resetRun()">RESET RUN</button>
 
-    <div id="shop-modal" class="modal shop-modal">
-        <h3 style="color:var(--accent-blue); margin:0 0 10px 0;">NIGHT SHOP</h3>
-        <p id="shop-rent-msg" style="font-size:0.8rem; margin-bottom:15px;"></p>
-        <div id="shop-items" style="max-height: 300px; overflow-y: auto;"></div>
-        <button id="reroll-btn" class="buy-btn" style="flex:1;" onclick="rerollShop()">
-        Reroll (<span id="reroll-display">5</span>💰)
-        </button>
-        <button class="btn-primary" style="width:100%; margin-top:10px;" onclick="nextDay()">START NEXT DAY</button>
-    </div>
+</div><!-- /game-shell -->
 
-    <div id="result-modal" class="modal">
-        <h2 id="modal-title"></h2>
-        <p id="modal-msg"></p>
-        <button class="btn-primary" style="width: 100%;" onclick="closeModal()">COLLECT</button>
-    </div>
 
-    <div id="reset-modal" class="modal">
-        <h2 id="reset-modal-title"></h2>
-        <p id="reset-modal-msg"></p>
-        <button class="btn-danger" style="width: 100%;"></button>
+<!-- ═══ BLIND INTRO MODAL ═══ -->
+<div id="blind-intro-modal" class="modal modal-intro">
+    <div class="intro-ante-badge">ANTE <span id="intro-ante">1</span></div>
+    <div id="intro-icon" class="intro-blind-icon">🟢</div>
+    <h2 id="intro-name" class="intro-blind-name">Small Blind</h2>
+    <div class="intro-stats">
+        <div class="intro-stat">
+            <span class="intro-stat-label">TARGET</span>
+            <span class="intro-stat-value gold"><span id="intro-target">30</span>💰</span>
+        </div>
+        <div class="intro-stat-divider"></div>
+        <div class="intro-stat">
+            <span class="intro-stat-label">CARDS</span>
+            <span class="intro-stat-value"><span id="intro-cards">3</span></span>
+        </div>
     </div>
-
-    <div id="boss-modal" class="modal">
-    <div class="modal-content" style="border: 2px solid var(--joker-purple); text-align: center;">
-        <h2 id="boss-title" style="color: var(--joker-purple); font-size: 2rem;">— THE TAX MAN —</h2>
-        <div id="boss-icon" style="font-size: 4rem; margin: 10px 0;">🕵️‍♂️</div>
-        <h3 id="mod-name" style="margin-bottom: 5px;"></h3>
-        <p id="mod-desc" style="opacity: 0.8; margin-bottom: 20px;"></p>
-        <button class="buy-btn" onclick="closeBossModal()" style="width: 100%;">Fine...</button>
+    <div id="intro-mod-row" class="intro-mod-row" style="display:none">
+        <span id="intro-mod-icon">❄️</span>
+        <span id="intro-mod-text" class="intro-mod-text"></span>
     </div>
+    <button class="btn-primary btn-buy" style="width:100%;margin-top:18px;" onclick="closeBlindIntro()">
+        LET'S SCRATCH! 🎰
+    </button>
 </div>
 
-<script>
-    // New Global to track if AutoReveal is bought
-    window.hasAutoReveal = false;
+<!-- ═══ RESULT MODAL ═══ -->
+<div id="result-modal" class="modal">
+    <h2 id="modal-title"></h2>
+    <div id="modal-msg"></div>
+    <button class="btn-primary btn-buy mt-8" style="width:100%;" onclick="closeModal()">COLLECT</button>
+</div>
 
-    let rerollCost = 5;
-
-    let currentSymbols = []; // Stores the symbols of the currently active card
-    let currentType = 'mini'; // Tracks which ticket type is active (mini, mega, ultra)
-    let winningIndices = []; 
-    let winColor = "var(--accent-green)";
-    let isJackpot = false;
-    let pendingWin = 0;
-
-    const TOKENS_DB = [
-    { id: 't1', name: 'Golden Coin', icon: '🪙', desc: '+5💰 flat win on every card', cost: 40 },
-    { id: 't2', name: 'Lucky Dice', icon: '🎲', desc: '1 in 4 chance to double your win', cost: 50 },
-    { id: 't3', name: 'Sharp Nail', icon: '💅', desc: 'Instantly reveal 10% more card', cost: 35 },
-    { id: 't4', name: 'Tax Loophole', icon: '📜', desc: '-10💰 from end-of-day Rent', cost: 60 },
-    { id: 't5', name: 'Lemon Squeezer', icon: '🍋', desc: '🍋 matches pay 3x', cost: 45 }
-    ];
-
-    const BOSS_MODS = [
-    { id: 'frozen_slot', name: "Audit", desc: "One random token slot is disabled today.", icon: "❄️" },
-    { id: 'double_cost', name: "Inflation", desc: "All scratch cards cost 2x more today.", icon: "📈" },
-    { id: 'no_pairs', name: "Standardization", desc: "Pairs pay $0 today. Only 3-of-a-kind or better counts!", icon: "🚫" },
-    { id: 'tax_cut', name: "Hidden Fees", desc: "Every card played costs an extra $5 flat.", icon: "💸" }
-    ];
-
-    let activeBossMod = null; // Global variable to track the current boss effect
-    let frozenSlotIndex = null; // Stores index 0-4
-
-    let tokens = []; // The player's current 5 slots
-
-    const TICKET_TYPES = {
-        mini:  { cost: 2,  cols: 2, rows: 2, win3: 10, win2: 5,  pair2: 15 },
-        mega:  { cost: 10, cols: 3, rows: 3, win3: 100, win2: 20, pair2: 50 },
-        ultra: { cost: 50, cols: 4, rows: 4, win3: 500, win2: 100, pair2: 250 }
-    };
-
-    let coins = 20, sizeLvl = 1, strLvl = 1, day = 1, cardsPlayed = 0, ante = 1;
-    let multipliers = { '🍒': 1, '💎': 1, '🍋': 1, '⭐': 1, '🔔': 1 };
-    let cardActive = false, isDrawing = false, lastX, lastY;
-    let boughtItemsThisNight = new Set(); // Tracks what was bought tonight
-    const symbols = ['🍒', '💎', '🍋', '⭐', '🔔'];
-    
-    // Default base values for symbols
-    let symbolData = {
-    '🍒': { val: 5,  lvl: 1 },
-    '🍋': { val: 10, lvl: 1 },
-    '🔔': { val: 15, lvl: 1 },
-    '⭐': { val: 20, lvl: 1 },
-    '💎': { val: 30, lvl: 1 }
-    };
-
-    const canvas = document.getElementById('scratch-canvas');
-    const ctx = canvas.getContext('2d');
-    const pCtx = document.getElementById('particle-canvas').getContext('2d');
-    let particles = [];
-
-    // New Global to track if AutoReveal is bought
-    window.hasAutoReveal = false; 
-    let rentPaidThisNight = false; // New flag
-
-    function updateUI() {
-        document.getElementById('coin-count').innerText = Math.floor(coins);
-        document.getElementById('day-num').innerText = day;
-        document.getElementById('ante-num').innerText = ante;
-        document.getElementById('cards-count').innerText = `${cardsPlayed}`;
-        document.getElementById('rent-amount').innerText = 5 + (day * 5 * ante);
-
-        //const cardText = document.getElementById('cards-count');
-        //if (cardText) cardText.innerText = `${cardsPlayed}/5`;
-
-        // Populate symbol value and levels in UI
-    const levelBar = document.getElementById('symbol-levels');
-    if (levelBar) {
-        levelBar.innerHTML = Object.entries(symbolData)
-            .map(([sym, data]) => {
-                return `<span>
-                    ${sym} <b style="color:var(--accent-blue)">Lvl ${data.lvl}</b> 
-                    <small style="opacity:0.7">(${data.val}💰)</small>
-                </span>`;
-            })
-            .join(' | ');
-    }
-
-        // --- GATE TICKET TABS ---
-    const tabs = document.querySelectorAll('.ticket-tab');
-    tabs.forEach(tab => {
-        // 1. Get the original label (we'll store it in a data attribute)
-        if (!tab.dataset.label) tab.dataset.label = tab.innerText;
-            const originalLabel = tab.dataset.label.toUpperCase();
-
-        // 2. Logic to check day and update visible text
-        if (originalLabel.includes('MEGA') && day < 3) {
-            tab.style.opacity = "0.5";
-            tab.style.pointerEvents = "none";
-            tab.innerText = "🔒 Day 3"; // Visible on Mobile & Desktop
-        } else if (originalLabel.includes('ULTRA') && day < 6) {
-            tab.style.opacity = "0.5";
-            tab.style.pointerEvents = "none";
-            tab.innerText = "🔒 Day 6"; // Visible on Mobile & Desktop
-        } else {
-            // 3. Unlock and restore original text
-            tab.style.opacity = "1";
-            tab.style.pointerEvents = "auto";
-            tab.innerText = tab.dataset.label;
-    }
-});
-
-        const autoBtn = document.getElementById('auto-reveal-btn');
-        if (window.hasAutoReveal) {
-            // Show the button if they own the upgrade
-            autoBtn.style.display = 'block'; 
-        
-            // Disable it if no card is currently being played
-            autoBtn.disabled = !cardActive; 
-        } else {
-            autoBtn.style.display = 'none';
-        }
-
-        const bar = document.getElementById('token-bar');
-if (bar) {
-    bar.innerHTML = ''; // Clear the bar to rebuild
-    for (let i = 0; i < 5; i++) {
-        const slot = document.createElement('div');
-        slot.className = 'token-slot';
-        
-        // 1. Check for Boss Frozen Slot
-        const isFrozen = (day === 5 && i === frozenSlotIndex);
-        
-        if (isFrozen) {
-            slot.style.background = "rgba(239, 68, 68, 0.2)";
-            slot.style.borderColor = "#ef4444";
-            slot.style.boxShadow = "inset 0 0 10px #ef4444";
-        }
-
-        // 2. Add Token Icon or Placeholder
-        if (tokens[i]) {
-            // Add the icon and ensure it doesn't block mouse events
-            slot.innerHTML = `<span style="pointer-events: none;">${tokens[i].icon}</span>`;
-            if (!isFrozen) slot.style.borderColor = 'var(--joker-purple)';
-            
-            // RESTORE HOVER INFO: Set the data-tip for the tooltip
-            const prefix = isFrozen ? "[FROZEN] " : "";
-            slot.setAttribute('data-tip', `${prefix}${tokens[i].name}: ${tokens[i].desc}`);
-        } else {
-            // Empty slot logic
-            slot.innerHTML = isFrozen ? '<span style="pointer-events: none;">🚫</span>' : '<span style="opacity:0.2">+</span>';
-            if (isFrozen) slot.setAttribute('data-tip', "This slot is currently disabled by the Tax Man!");
-        }
-
-        bar.appendChild(slot);
-    }
-}
-}
-
-    function selectTicket(type, el) {
-        if (cardActive) return;
-        currentType = type;
-        
-        // 1. DYNAMIC THEMING
-        const colors = {
-            mini:  { title: 'var(--accent-blue)',  scratch: '#cbd5e1' }, // Standard Grey
-            mega:  { title: 'var(--joker-purple)', scratch: '#94a3b8' }, // Darker Slate
-            ultra: { title: 'var(--ultra-gold)',   scratch: '#fbbf24' }  // Deep Bronze
-        };
-
-        // Update the dynamic title
-        const titleDisp = document.getElementById('card-title-display');
-        if (titleDisp) {
-        titleDisp.innerText = type.toUpperCase() + " TICKET";
-        titleDisp.style.color = colors[type].title;
-        }
-
-        // Update Tabs
-        document.querySelectorAll('.ticket-tab').forEach(t => t.classList.remove('active'));
-        if (el) el.classList.add('active');
-
-        // Rebuild Grid Layout
-        const t = TICKET_TYPES[type];
-        const grid = document.getElementById('prize-grid');
-        grid.style.gridTemplateColumns = `repeat(${t.cols}, 1fr)`;
-        grid.innerHTML = '';
-        
-        // Fill with placeholders
-        for(let i=0; i < t.cols*t.rows; i++) {
-            const c = document.createElement('div');
-            c.className = 'prize-cell preview-mode'; 
-            c.innerText = '?'; 
-            grid.appendChild(c);
-        }
-
-        // 3. PREPARE CANVAS TEXTURE
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = colors[type].scratch; // Apply the unique card color
-        ctx.fillRect(0, 0, 320, 320);
-
-        // Add the "Noise" texture back
-        ctx.fillStyle = 'rgba(0,0,0,0.15)'; // Sublte dark specks
-        for(let i=0; i<800; i++) {
-            ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
-        }
-
-        // Ensure UI stays in sync
-        updateUI();
-    }
-
-    let hasAutoScratch = false; // Set to true when bought in shop
-
-function autoReveal() {
-    if (!cardActive) return;
-    cardActive = false;
-    
-    // Keep canvas visible to show effects
-        // Visual Reveal Sequence
-        canvas.style.transition = "opacity 0.8s ease-in";
-        canvas.style.opacity = 1;
-
-        // DRAW THE EFFECTS HERE
-        if (winningIndices.length > 0) {
-            drawWinEffects(winningIndices, winColor, isJackpot);
-        } else {
-            ctx.clearRect(0, 0, 320, 320); // Clear if no win
-        }
-
-        setTimeout(() => {
-            // REMOVE: coins += pendingWin;  <-- Delete this line
-            document.getElementById('result-modal').style.display = 'block';
-        }, 2000);
-}
-
-    function buyCard() {
-    const t = TICKET_TYPES[currentType];
-    
-    // BOSS
-    let actualCost = t.cost;
-    // Check if Inflation is active
-    if (activeBossMod && activeBossMod.id === 'double_cost') {
-        actualCost *= 2;
-    }
-
-    if (coins < t.cost) return alert("Broke!");
-
-    // REMOVE PREVIEW MODE
-    const cells = document.querySelectorAll('.prize-cell');
-    cells.forEach(cell => {
-        cell.classList.remove('preview-mode'); // Cell drops behind canvas
-        cell.innerText = ''; // Hide the '?' so it doesn't overlap the future prize
-    });
-
-    // Draw scratch layer
-    // Instead of hardcoded, use the current theme
-    const themeColors = {
-        mini: '#cbd5e1',
-        mega: '#94a3b8',
-        ultra: '#fbbf24'
-    };
-
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = themeColors[currentType]; // Uses the unique color!
-    ctx.fillRect(0, 0, 320, 320);
-
-    // Add the "Noise" texture back
-    ctx.fillStyle = 'rgba(0,0,0,0.15)'; // Sublte dark specks
-    for(let i=0; i<800; i++) {
-        ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
-    }
-    
-    // Deduct cost immediately
-    coins -= t.cost;
-    
-    currentSymbols = []; // Clear old
-    const res = [];
-    document.querySelectorAll('.prize-cell').forEach(c => {
-        const s = symbols[Math.floor(Math.random()*symbols.length)];
-        c.innerHTML = s; res.push(s);
-    });
-
-    // Score Calculation Breakdown
-    currentSymbols = res; // Store for saving
-    
-    const counts = {}; res.forEach(s => counts[s] = (counts[s]||0)+1);
-    const valCounts = Object.values(counts);
-    const maxMatch = Math.max(...valCounts);
-    const winningSymbol = Object.keys(counts).find(key => counts[key] === maxMatch);
-
-    calculateWin(res); // Move math to a helper function
-
-    cardActive = true;
-    saveGame();
-    updateUI();
-
-
-
-
-    cardActive = true; 
-    canvas.style.opacity = 1; 
-    document.getElementById('buy-btn').disabled = true;
-
-    // Show Auto-Reveal if upgrade is owned
-if (window.hasAutoReveal) {
-    document.getElementById('auto-reveal-btn').style.display = 'block';
-}
-    saveGame(); // <--- Add this here!
-    updateUI();
-}
-
-function calculateWin(res) {
-    const t = TICKET_TYPES[currentType];
-    let potentialWins = []; // The "basket" to collect all detected patterns
-    let pairSuperseded = false;
-    base = 0;
-    matchType = "No Match";
-    winningIndices = []; 
-    let winningSymbol = res[0]; 
-    isJackpot = false;
-    winColor = "var(--accent-green)";
-
-    const gridWidth = t.cols;
-    const lines = [];
-
-    // --- 1. GENERATE LINES ---
-    for (let r = 0; r < t.rows; r++) {
-        let row = []; for (let c = 0; c < t.cols; c++) row.push(r * gridWidth + c);
-        lines.push(row);
-    }
-    for (let c = 0; c < t.cols; c++) {
-        let col = []; for (let r = 0; r < t.rows; r++) col.push(r * gridWidth + c);
-        lines.push(col);
-    }
-    let d1 = [], d2 = [];
-    for (let i = 0; i < t.cols; i++) {
-        d1.push(i * gridWidth + i);
-        d2.push(i * gridWidth + (gridWidth - 1 - i));
-    }
-    lines.push(d1, d2);
-
-    // --- 2. JACKPOT DETECTION ---
-    for (let line of lines) {
-        const symbolsInLine = line.map(idx => res[idx]);
-        const firstSymbol = res[0];
-    if (res.every(s => s === firstSymbol)) {
-        let jackpotVal = t.win3 + (symbolData[firstSymbol].val * res.length);
-        potentialWins.push({ 
-            type: 'JACKPOT!', 
-            val: jackpotVal, 
-            idx: res.map((_, i) => i), // Highlight the WHOLE board
-            symbol: firstSymbol 
-        });
-    }
-    }
-
-    // --- 3. L-SHAPE DETECTION ---
-    for (let r = 0; r < t.rows - 1; r++) {
-        for (let c = 0; c < t.cols - 1; c++) {
-            const i = r * gridWidth + c;
-            const right = i + 1, down = i + gridWidth, corner = i + gridWidth + 1;
-            const shapes = [[i, right, down], [i, right, corner], [i, down, corner], [right, down, corner]];
-            for (let shape of shapes) {
-                if (res[shape[0]] === res[shape[1]] && res[shape[0]] === res[shape[2]]) {
-                    let sym = res[shape[0]];
-                    let val = (t.win3 || 10) + (symbolData[sym].val * 3);
-                    potentialWins.push({ type: 'L-SHAPE!', val: val, idx: shape, symbol: sym });
-                }
-            }
-        }
-    }
-
-    // --- 4. PAIR DETECTION (Checks Boss Mod) ---
-    if (activeBossMod?.id !== 'no_pairs') {
-        let pairsFound = []; 
-        for (let line of lines) {
-            const s = line.map(idx => res[idx]);
-            let found = null;
-            if (s[0] === s[1]) found = { sym: s[0], indices: [line[0], line[1]] };
-            else if (s.length >= 3 && s[1] === s[2]) found = { sym: s[1], indices: [line[1], line[2]] };
-            else if (s.length === 4 && s[2] === s[3]) found = { sym: s[2], indices: [line[2], line[3]] };
-
-            if (found && !pairsFound.some(p => p.sym === found.sym)) {
-                pairsFound.push(found);
-            }
-            if (pairsFound.length >= 2) break;
-        }
-
-        if (pairsFound.length === 2) {
-            let p1 = pairsFound[0], p2 = pairsFound[1];
-            let val = (t.pair2 || 15) + (symbolData[p1.sym].val * 2) + (symbolData[p2.sym].val * 2);
-            potentialWins.push({ type: 'Two Pair', val: val, idx: p1.indices.concat(p2.indices), symbol: p1.sym });
-        } else if (pairsFound.length === 1) {
-            let p1 = pairsFound[0];
-            let val = t.win2 + (symbolData[p1.sym].val * 2);
-            potentialWins.push({ type: 'Pair', val: val, idx: p1.indices, symbol: p1.sym });
-        }
-    }
-
-    // --- 5. RESOLVE BEST WIN (Links to Draw Function) ---
-    if (potentialWins.length > 0) {
-        potentialWins.sort((a, b) => b.val - a.val);
-        let best = potentialWins[0];
-        
-        base = best.val;
-        matchType = best.type;
-        winningIndices = best.idx; // Now correctly updates global variable
-        winningSymbol = best.symbol;
-        
-        isJackpot = (matchType === "JACKPOT!");
-        winColor = isJackpot ? "var(--text-gold)" : "var(--accent-green)";
-        
-        if (potentialWins.length > 1) pairSuperseded = true;
-    } else {
-        winningIndices = []; // Clear for no-win cards
-    }
-
-    // --- 6. APPLY MULTIPLIERS & TOKENS ---
-    let mult = multipliers[winningSymbol] || 1;
-    let finalWin = Math.floor(base * mult);
-    let flatBonus = 0;
-    let diceTriggered = false;
-
-    tokens.forEach((tk, index) => {
-        if (index !== frozenSlotIndex) {
-            if (tk.id === 't1') flatBonus += 5; // Golden Coin
-            if (tk.id === 't2' && Math.random() < 0.25) diceTriggered = true; // Lucky Dice
-        }
-    });
-
-    if (diceTriggered) finalWin *= 2;
-    pendingWin = finalWin + flatBonus;
-
-    // --- 7. UPDATE MODAL DISPLAY ---
-    let ticketPrize = (matchType === 'Two Pair' || matchType === 'L-SHAPE!') ? (t.pair2 || 15) : (isJackpot ? t.win3 : t.win2);
-    if (matchType === "No Match") ticketPrize = 0;
-    let totalSymBonus = (matchType !== "No Match") ? (base - ticketPrize) : 0;
-    let priorityNote = pairSuperseded ? `<div style="font-size: 0.7rem; color: var(--accent-blue); margin-top: -5px; margin-bottom: 5px;">ℹ️ Highest Pattern Payout Selected</div>` : "";
-
-    document.getElementById('modal-title').innerText = (matchType !== "No Match") ? "WINNER!" : "PITY PAYOUT";
-    document.getElementById('modal-msg').innerHTML = `
-        <div style="text-align: left; font-size: 0.85rem; color: #334155;">
-            <div style="display:flex; justify-content:space-between;"><span>Result:</span> <b>${matchType}</b> ${diceTriggered ? '<span class="multiplier-tag">DICE x2</span>' : ''}</div>
-            ${priorityNote}
-            <div style="display:flex; justify-content:space-between;"><span>Ticket Prize:</span> <b>+${ticketPrize}💰</b></div>
-            <div style="display:flex; justify-content:space-between;"><span>Celestial Bonus:</span> <b style="color:var(--accent-blue)">+${totalSymBonus}💰</b></div>
-            <div style="display:flex; justify-content:space-between;"><span>Multiplier:</span> <b>x${mult.toFixed(1)}</b></div>
-            <hr style="border: 0.5px solid #e2e8f0; margin: 8px 0;">
-            <div style="display:flex; justify-content:space-between; font-size: 1.1rem;"><b>Total:</b> <b style="color:var(--accent-green)">${pendingWin}💰</b></div>
+<!-- ═══ SHOP MODAL ═══ -->
+<div id="shop-modal" class="modal modal-shop">
+    <div class="shop-header">
+        <h3>🛒 NIGHT SHOP</h3>
+        <div class="shop-result-badge">
+            <span>Ante <span id="shop-ante">1</span> · <span id="shop-blind">Small Blind</span></span>
+            <b class="gold"><span id="shop-earned">0</span> / <span id="shop-target">30</span>💰 ✓</b>
         </div>
-    `;
-}
+    </div>
+    <div id="shop-items" style="max-height:340px; overflow-y:auto;"></div>
+    <button class="btn-reroll" onclick="rerollShop()">🔄 Reroll (<span id="reroll-display">6</span>💰)</button>
+    <button id="shop-next-btn" class="btn-primary btn-buy mt-8" style="width:100%;" onclick="nextBlind()">
+        🟡 Big Blind
+    </button>
+</div>
 
-    function checkReveal() {
-    const data = ctx.getImageData(0,0,320,320).data;
-    let trans = 0; for(let i=3; i<data.length; i+=4) if(data[i] === 0) trans++;
+<!-- ═══ RESET MODAL ═══ -->
+<div id="reset-modal" class="modal">
+    <h2 id="reset-modal-title">RESET RUN?</h2>
+    <p  id="reset-modal-msg"></p>
+    <button class="btn-danger"    id="reset-confirm-btn" style="width:100%;">YES, DELETE EVERYTHING</button>
+    <button class="btn-secondary" style="width:100%;" onclick="cancelReset()">No, take me back</button>
+</div>
 
-    // Check if player scratched enough (roughly 55%)
-    if (trans / (320*320) > (0.55 - strLvl*0.01)) {
-        cardActive = false; 
-        // Keep canvas visible to show effects
-        // Visual Reveal Sequence
-        canvas.style.transition = "none"; 
-        canvas.style.opacity = 1;
+<!-- ═══ GAME OVER MODAL ═══ -->
+<div id="gameover-modal" class="modal modal-gameover">
+    <div class="gameover-skull">💀</div>
+    <h2>GAME OVER</h2>
+    <p class="gameover-sub">You couldn't meet the blind target.</p>
+    <div class="gameover-stats">
+        <div class="gameover-row"><span>Ante</span><b id="gameover-ante">1</b></div>
+        <div class="gameover-row"><span>Blind</span><b id="gameover-blind">Small Blind</b></div>
+        <div class="gameover-row"><span>Target</span><b id="gameover-target">30</b>💰</div>
+        <div class="gameover-row"><span>Earned</span><b id="gameover-earned">0</b>💰</div>
+    </div>
+    <button class="btn-primary btn-buy" style="width:100%;margin-top:20px;" onclick="restartGame()">
+        🔄 START NEW RUN
+    </button>
+</div>
 
-        // DRAW THE EFFECTS HERE
-        if (winningIndices.length > 0) {
-            drawWinEffects(winningIndices, winColor, isJackpot);
-        } else {
-            ctx.clearRect(0, 0, 320, 320); // Clear if no win
-        }
+<!-- ═══ BOSS MODAL (legacy, kept for future use) ═══ -->
+<div id="boss-modal" class="modal" style="display:none">
+    <h2 id="boss-title">— THE TAX MAN —</h2>
+    <div id="boss-icon" style="font-size:4rem;margin:10px 0;">🕵️</div>
+    <h3 id="mod-name"></h3><p id="mod-desc"></p>
+    <button class="btn-boss-ok" onclick="closeBossModal()">Fine…</button>
+</div>
 
-        setTimeout(() => {
-            document.getElementById('result-modal').style.display = 'block';
-        }, 2000);
-    }
-}
+<!-- ═══ TOAST ═══ -->
+<div id="toast"></div>
 
-function drawWinEffects(indices, color, isJackpot) {
-    const cells = document.querySelectorAll('.prize-cell');
-    ctx.clearRect(0, 0, 320, 320); // Clear scratch layer
-    ctx.globalCompositeOperation = 'source-over';
-    
-    // Highlight winning symbols
-    // Only loop through the specific indices provided
-    indices.forEach(idx => {
-        const cell = cells[idx];
-        if (!cell) return;
-        const rect = {
-            x: cell.offsetLeft,
-            y: cell.offsetTop,
-            w: cell.offsetWidth,
-            h: cell.offsetHeight
-        };
+<!-- Scripts -->
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/save.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/game.js"></script>
+<script src="js/shop.js"></script>
+<script src="js/input.js"></script>
+<script src="js/main.js"></script>
 
-        // Draw Glow Box
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = color === "var(--text-gold)" ? "#f1c40f" : 
-                         (color === "var(--joker-purple)" ? "#a855f7" : "#22c55e");
-        ctx.strokeStyle = ctx.shadowColor;
-        ctx.lineWidth = 4;
-        ctx.strokeRect(rect.x + 5, rect.y + 5, rect.w - 10, rect.h - 10);
-    });
-
-    // Draw Jackpot Strike Line
-    if (isJackpot && indices.length > 0) {
-        const first = cells[indices[0]];
-        const last = cells[indices[indices.length - 1]];
-        
-        ctx.beginPath();
-        ctx.moveTo(first.offsetLeft + first.offsetWidth/2, first.offsetTop + first.offsetHeight/2);
-        ctx.lineTo(last.offsetLeft + last.offsetWidth/2, last.offsetTop + last.offsetHeight/2);
-        ctx.lineWidth = 10;
-        ctx.lineCap = 'round';
-        ctx.stroke();
-    }
-    ctx.shadowBlur = 0; // Reset shadow
-}
-
-function resumeActiveCard() {
-    // 1. Set the correct ticket tab UI
-    const tabs = document.querySelectorAll('.ticket-tab');
-    tabs.forEach(t => {
-        if (t.innerText.toLowerCase().includes(currentType)) t.classList.add('active');
-        else t.classList.remove('active');
-    });
-
-    // 2. Rebuild the Grid
-    const t = TICKET_TYPES[currentType];
-    const grid = document.getElementById('prize-grid');
-    grid.style.gridTemplateColumns = `repeat(${t.cols}, 1fr)`;
-    grid.innerHTML = '';
-    
-    currentSymbols.forEach(s => {
-        const c = document.createElement('div'); 
-        c.className = 'prize-cell'; 
-        c.innerHTML = s; 
-        grid.appendChild(c);
-    });
-
-    // 3. Prepare Canvas
-    const themeColors = {
-        mini: '#cbd5e1',
-        mega: '#94a3b8',
-        ultra: '#fbbf24'
-    };
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = themeColors[currentType]; 
-    ctx.fillRect(0, 0, 320, 320);
-    
-    // 4. Lock UI
-    document.getElementById('buy-btn').disabled = true;
-    if (window.hasAutoReveal) document.getElementById('auto-reveal-btn').style.display = 'block';
-
-    // 5. Re-run the win math so winningIndices are ready
-    calculateWin(currentSymbols); 
-    cardActive = true; 
-    isDrawing = false;
-}
-
-    // THIS IS WHERE THE MONEY IS ACTUALLY GIVEN
-function closeModal() {
-    coins += pendingWin; // Give the player the reward now
-    pendingWin = 0;      // Reset it so they can't collect twice
-
-    cardsPlayed++;
-
-    const cancelBtn = document.getElementById('cancel-reset-btn');
-    if (cancelBtn) cancelBtn.remove(); // Safety cleanup
-
-    document.getElementById('reset-modal').style.display = 'none';
-    
-    document.getElementById('result-modal').style.display = 'none';
-    
-    // RE-ENABLE PREVIEW: Prepare for the next potential card
-    document.querySelectorAll('.prize-cell').forEach(c => {
-        c.innerText = "?";
-        c.classList.add('preview-mode'); // Bring '?' back to the front
-    });
-
-    // Redraw the solid scratch color for the preview
-    const themeColors = { mini: '#cbd5e1', mega: '#94a3b8', ultra: '#fbbf24' };
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = themeColors[currentType]; 
-    ctx.fillRect(0, 0, 320, 320);
-
-    // Add the "Noise" texture back
-    ctx.fillStyle = 'rgba(0,0,0,0.15)'; // Sublte dark specks
-    for(let i=0; i<800; i++) {
-        ctx.fillRect(Math.random()*320, Math.random()*320, 1.5, 1.5);
-    }
-
-    cardActive = false;
-    currentSymbols = []; // Wipe the saved card
-    
-    // Logic to open shop or refresh UI
-    if (cardsPlayed >= 5) {
-        document.getElementById('buy-btn').disabled = true;
-        // This opens the shop and WAITS for the player
-        openShop(); 
-    } else {
-        // This just lets them keep playing the same day
-        document.getElementById('buy-btn').disabled = false;
-        updateUI();
-    }
-    saveGame();
-}
-
-function openShop() {
-    // Force the modal to show first
-    document.getElementById('shop-modal').style.display = 'block';
-
-    const rerollDisp = document.getElementById('reroll-display');
-    if (rerollDisp) rerollDisp.innerText = rerollCost;
-
-
-    const rent = 5 + (day * 5 * ante);
-
-    // Apply Tax Loophole if owned
-    const effectiveRent = tokens.some(t => t.id === 't4') ? Math.max(0, rent - 10) : rent;
-    
-    // Only deduct rent once per night
-    if (!rentPaidThisNight) {
-        if (coins < effectiveRent) {
-            alert("GAME OVER: CAN'T PAY RENT!");
-            resetRun(); 
-            return;
-        }
-        coins -= effectiveRent;
-        rentPaidThisNight = true; 
-        saveGame();
-    }
-
-    document.getElementById('shop-rent-msg').innerHTML = `Paid <b>${effectiveRent}💰</b> Rent. Balance: <b>${Math.floor(coins)}💰</b>`;
-    
-   renderShopItems();
-    updateUI();
-}
-
-    function addShopItem(gridId, name, desc, cost, uniqueId, action) {
-    const grid = document.getElementById(gridId);
-    const div = document.createElement('div');
-    const isSold = boughtItemsThisNight.has(uniqueId);
-    
-    div.className = `item-card ${isSold ? 'sold-out' : ''}`;
-    div.innerHTML = `
-        <div class="item-info"><b>${name}</b><span>${desc}</span></div>
-        <button class="btn-buy-item" ${coins < cost || isSold ? 'disabled' : ''}>${isSold ? 'SOLD' : cost + '💰'}</button>
-    `;
-
-    div.querySelector('button').onclick = () => {
-        if (coins >= cost) {
-            coins -= cost;
-            action();
-            boughtItemsThisNight.add(uniqueId);
-            saveGame();
-            updateUI();
-            openShop(); // Re-render to update all buttons
-        }
-    };
-    grid.appendChild(div);
-}
-
-function nextDay() {
-    // 1. Close the shop first
-    document.getElementById('shop-modal').style.display = 'none';
-
-    // 2. Prepare for the new day
-    rentPaidThisNight = false; 
-    boughtItemsThisNight.clear(); 
-    day++; // Day actually increments here
-    cardsPlayed = 0;
-
-
-    // 3. BOSS CHECK - This happens AFTER the shop closes but BEFORE you can play cards
-    // Check for Boss encounter (Every 5 days)
-    if (day % 5 === 0) { 
-        activeBossMod = BOSS_MODS[Math.floor(Math.random() * BOSS_MODS.length)];
-        
-        if (activeBossMod.id === 'frozen_slot') {
-            frozenSlotIndex = Math.floor(Math.random() * 5);
-        } else {
-            frozenSlotIndex = null;
-        }
-
-        document.getElementById('mod-name').innerText = activeBossMod.name;
-        document.getElementById('mod-desc').innerText = activeBossMod.desc; 
-        document.getElementById('boss-modal').style.display = 'block';
-    }
-
-    // 4. Reset card state for the new day
-    cardActive = false;
-    currentSymbols = [];
-    document.getElementById('buy-btn').disabled = false;
-    saveGame();
-    updateUI();
-}
-
-function closeBossModal() {
-    document.getElementById('boss-modal').style.display = 'none';
-}
-
-function rerollShop() {
-    if (coins < rerollCost) {
-        alert("Not enough coins to reroll!");
-        return;
-    }
-
-    coins -= rerollCost;
-    rerollCost += 2; // Increase cost per reroll to prevent infinite fishing
-    
-    // Refresh the shop items
-    renderShopItems();
-    
-    // Update the UI to show new coin balance and new reroll price
-    updateUI();
-    saveGame();
-}
-
-function renderShopItems() {
-    const container = document.getElementById('shop-items');
-    // We must reset the innerHTML to include the grid containers every time we render
-    container.innerHTML = `
-        <div class="shop-section">
-            <div class="shop-section-title">GEAR & VIP</div>
-            <div id="gear-grid" class="shop-grid"></div>
-        </div>
-        <div class="shop-section">
-            <div class="shop-section-title">LUCKY TOKENS</div>
-            <div id="token-grid" class="shop-grid"></div>
-        </div>
-        <div class="shop-section">
-            <div class="shop-section-title">VOUCHERS & UPGRADES</div>
-            <div id="voucher-grid" class="shop-grid"></div>
-        </div>
-    `;
-
-    // 1. GEAR (Permanent Stats)
-    // Items check against boughtItemsThisNight
-    addShopItem("gear-grid", "Widen Coin", `Lvl ${sizeLvl+1}`, sizeLvl*40, "widen", () => sizeLvl++);
-    addShopItem("gear-grid", "Scratch Power", `Lvl ${strLvl+1}`, strLvl*60, "power", () => strLvl++);
-
-    // 2. TOKENS (Available slots)
-    const dailyTokens = TOKENS_DB.filter(t => !tokens.some(mt => mt.id === t.id)).slice(0, 2);
-    dailyTokens.forEach(t => {
-        addShopItem("token-grid", `${t.icon} ${t.name}`, t.desc, t.cost, t.id, () => tokens.push(t));
-    });
-
-    // 3. AUTO REVEAL
-    if (!window.hasAutoReveal) {
-        addShopItem("voucher-grid", "⚡ Auto-Laser", "Unlocks Quick Reveal", 1000, "autolaser", () => window.hasAutoReveal = true);
-    }
-
-    // 4. SYMBOL UPGRADES (Celestial Style)
-    // Pick 2 random symbols for the shop
-    // --- CELESTIAL SYMBOL UPGRADES ---
-    // This part runs every time rerollShop() calls renderShopItems()
-    const available = Object.keys(symbolData).sort(() => 0.5 - Math.random()).slice(0, 2);
-    available.forEach(sym => {
-        addShopItem("voucher-grid", `${sym} Level Up`, `+5💰 base value for ${sym}`, 40, `lvl_${sym}`, () => {
-            symbolData[sym].val += 5;
-            symbolData[sym].lvl += 1;
-            updateUI(); // Ensure the Level Bar updates immediately
-        });
-    });
-    // Update the reroll button text
-    document.getElementById('reroll-display').innerText = rerollCost;
-}
-
-    // --- SYSTEMS ---
-
-// 1. The Particle Generator
-function createParticles(x, y, color) {
-    // strLvl makes more dust fall as you get stronger
-    for(let i=0; i < (2 * strLvl); i++) {
-        particles.push({
-            x: x + (Math.random()-0.5)*10, 
-            y: y + (Math.random()-0.5)*10,
-            vx: (Math.random() - 0.5) * 2, 
-            vy: Math.random() * 3, // Gravity effect
-            life: 30, 
-            size: 1 + Math.random() * 2,
-            color: color // Store the specific card color
-        });
-    }
-}
-
-// 2. The Animation Loop (Call this once at the start of your script)
-function animateParticles() {
-    pCtx.clearRect(0, 0, 320, 320);
-    particles.forEach((p, i) => {
-        p.x += p.vx; p.y += p.vy; p.life--;
-        // Use the particle's specific color with fading alpha
-        pCtx.fillStyle = p.color + Math.floor((p.life/30) * 255).toString(16).padStart(2, '0');
-        pCtx.fillRect(p.x, p.y, p.size, p.size);
-        if(p.life <= 0) particles.splice(i, 1);
-    });
-    requestAnimationFrame(animateParticles);
-}
-animateParticles();
-
-    function scratch(e) {
-        if (!isDrawing || !cardActive) return;
-        const rect = canvas.getBoundingClientRect();
-        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-        const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.lineWidth = 12 + sizeLvl*2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x,y); ctx.stroke();
-        lastX = x; lastY = y;
-        
-        const themeColors = { mini: '#38bdf8', mega: '#a855f7', ultra: '#fbbf24' };
-        const currentColor = themeColors[currentType] || '#cbd5e1';
-        createParticles(x, y, currentColor); // Pass the matching color
-        
-        if (Math.random()>0.9) checkReveal();
-    }
-
-    canvas.addEventListener('mousedown', e => { isDrawing=true; lastX=e.offsetX; lastY=e.offsetY; });
-    window.addEventListener('mouseup', () => isDrawing=false);
-    canvas.addEventListener('mousemove', scratch);
-    canvas.addEventListener('touchstart', e => { isDrawing=true; const r=canvas.getBoundingClientRect(); lastX=e.touches[0].clientX-r.left; lastY=e.touches[0].clientY-r.top; }, {passive:false});
-    canvas.addEventListener('touchmove', scratch, {passive:false});
-    function animate() { requestAnimationFrame(animate); }
-
-    // --- SAVE SYSTEM ---
-function saveGame() {
-    // We must include EVERY variable we want to survive a refresh
-    const gameState = { 
-        coins, 
-        sizeLvl, 
-        strLvl, 
-        day, 
-        ante, 
-        tokens, 
-        hasAutoReveal: window.hasAutoReveal, // Use the window prefix to be safe
-        cardsPlayed, 
-        rentPaidThisNight,
-        rerollCost, // Added this so rerolls don't reset to 5💰 on refresh
-        cardActive,
-        currentSymbols,
-        currentType,
-        symbolData,
-        activeBossMod
-    };
-    localStorage.setItem('scratch_inc_save', JSON.stringify(gameState));
-    console.log("Game Saved:", gameState); // Helpful for debugging
-}
-
-function loadGame() {
-    const saved = localStorage.getItem('scratch_inc_save');
-    if (saved) {
-        const data = JSON.parse(saved);
-        coins = data.coins || 20; 
-        sizeLvl = data.sizeLvl || 1; 
-        strLvl = data.strLvl || 1;
-        day = data.day || 1; 
-        ante = data.ante || 1; 
-        tokens = data.tokens || [];
-        window.hasAutoReveal = data.hasAutoReveal || false;
-        cardsPlayed = data.cardsPlayed || 0;
-        rentPaidThisNight = data.rentPaidThisNight || false;
-        rerollCost = data.rerollCost || 5;
-        // Restore card state
-        cardActive = data.cardActive || false;
-        currentSymbols = data.currentSymbols || [];
-
-        currentType = data.currentType || 'mini';
-        if (data.symbolData) symbolData = data.symbolData;
-
-        // 3. UI SYNC: Update the tabs and the grid layout
-        const tabs = document.querySelectorAll('.ticket-tab');
-        tabs.forEach(tab => {
-            const isMatch = tab.innerText.toLowerCase().includes(currentType);
-            tab.classList.toggle('active', isMatch);
-            
-            // Only rebuild the grid if there ISN'T an active card to resume
-            if (isMatch && !cardActive) {
-                selectTicket(currentType, tab);
-            }
-        });
-
-        // 4. RESUME: If they left mid-scratch, put the symbols back
-        if (cardActive && currentSymbols.length > 0) {
-            resumeActiveCard();
-            // Manually set title if resuming
-            document.getElementById('card-title-display').innerText = currentType.toUpperCase() + " TICKET";
-        }
-        updateUI();
-    }
-}
-
-function resetRun() {
-    const modal = document.getElementById('reset-modal');
-    const title = document.getElementById('reset-modal-title');
-    const msg = document.getElementById('reset-modal-msg');
-    const actionBtn = modal.querySelector('.btn-danger');
-
-    // 1. Show the modal
-    modal.style.display = 'block';
-    
-    // 2. Set the Warning Content
-    title.innerText = "RESET RUN?";
-    title.style.color = "#ef4444"; // Red for danger
-    msg.innerHTML = "All coins and upgrades will be lost.<br>This cannot be undone!";
-    
-    
-    // 3. Setup the Confirm Reset Button
-    actionBtn.innerText = "YES, DELETE EVERYTHING";
-    actionBtn.style.background = "#ef4444";
-    actionBtn.style.boxShadow = "0 4px 0 #991b1b";
-    actionBtn.onclick = function() {
-        localStorage.removeItem('scratch_inc_save');
-        location.reload();
-    };
-
-    // 4. Create and Add the Cancel Button if it doesn't exist
-    let cancelBtn = document.getElementById('cancel-reset-btn');
-    if (!cancelBtn) {
-        cancelBtn = document.createElement('button');
-        cancelBtn.id = 'cancel-reset-btn';
-        cancelBtn.className = 'cancel-reset-btn';
-        modal.appendChild(cancelBtn);
-    }
-    
-        cancelBtn.innerText = "No, take me back!";
-        cancelBtn.style.marginTop = "20px";
-        cancelBtn.style.background = "#64748b"; // Neutral slate color
-        cancelBtn.style.boxShadow = "0 4px 0 #334155";
-
-        cancelBtn.onclick = function() {
-            // Simply close the modal and cleanup
-            modal.style.display = 'none';
-            cancelBtn.remove();
-            // Reset the main button style for future use
-            actionBtn.style.background = ""; 
-            actionBtn.style.boxShadow = "";
-        };
-}
-
-// INIT
-    loadGame();
-    // Only select 'mini' if a card isn't already active from the load
-    // 2. If NO card was loaded/resumed, setup the default view
-    if (!cardActive) {
-    // Find the tab that matches our currentType (which might be from a save!)
-    const targetTab = Array.from(document.querySelectorAll('.ticket-tab'))
-                           .find(t => t.innerText.toLowerCase().includes(currentType));
-    selectTicket(currentType, targetTab);
-    } 
-    updateUI();
-    animate();
-
-</script>
 </body>
 </html>
